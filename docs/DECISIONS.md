@@ -1,0 +1,120 @@
+# DECISIONS
+
+Three lines per entry: what was decided, why, what was rejected.
+Newest at the bottom. Only non-obvious decisions belong here.
+
+---
+
+## 2026-09-11 - Project lives at `Desktop\PROJECTS\moto-app`, not `C:\dev\`
+
+**What:** The project root is `C:\Users\muri\Desktop\PROJECTS\moto-app`.
+**Why:** The original `C:\dev\` instruction existed to keep `node_modules` out of OneDrive sync, which corrupts builds. Checked this machine: the Desktop shell folder resolves to a plain local `C:\Users\muri\Desktop` and the OneDrive folder holds only a `desktop.ini`, so nothing on Desktop is synced. The risk the rule guarded against does not exist here, and this path matches where the other projects already live.
+**Rejected:** `C:\dev\moto-app`, which would have split this project away from every other repo on the machine for no active reason. Revisit if OneDrive folder backup is ever turned on for Desktop.
+
+---
+
+## 2026-09-11 - Node v24 LTS, upgrading from v22.15.0
+
+**What:** Move the machine to Node v24.21.0 (Krypton, the active LTS) before `create-expo-app` runs. Installed via the x64 MSI from nodejs.org, which upgrades the existing `C:\Program Files\nodejs` install in place. Brings npm 10.9.2 to 12.0.2 as a side effect, since npm ships inside Node.
+**Why:** The installed v22.15.0 dates from 22 Apr 2025 and the v22 line dropped to security-only maintenance on 21 Oct 2025, leaving it 16 patch releases behind with Node security releases in Mar, Jun and Jul 2026 all missed. Expo SDK 57 only requires v22.13, so this was not blocking, but the runtime sits under every other tool and a stale one turns into a suspected cause every time a native build misbehaves. Cheaper to fix at zero code than mid-project.
+**Rejected:** Staying on v22.15.0, which leaves known security patches unapplied for no gain. Patching to v22.23.2, which buys the security fixes but keeps the project on a line that dies April 2027, forcing the same upgrade again later. Waiting for v26 LTS on 28 Oct 2026, rejected because v24 is supported to April 2028 and there is no reason to idle six weeks. Also rejected: nvm-windows for multiple parallel versions, since one project on one machine does not need version switching and it adds a layer to debug.
+
+**Outcome:** installed and verified 11 Sep 2026. `node -v` reports v24.21.0, `npm -v` reports 11.19.0. Note the npm number: 11.19.0 is the version bundled inside that Node release, not the 12.0.2 currently newest on the registry. Bundled npm is the right one to keep.
+
+---
+
+## 2026-09-11 - `default` template, then `reset-project`
+
+**What:** Scaffold with `npx create-expo-app@latest . --no-agents-md` using the `default` template, then run `npm run reset-project` to move the demo app into `example/` and leave a clean `src/app` holding `index.tsx` and `_layout.tsx`.
+**Why:** The default template arrives with Expo Router already wired: `"main": "expo-router/entry"` in package.json, `"expo-router"` in the app.json plugins array, typed routes enabled, and a working `_layout.tsx`. Wiring that by hand is the single most error-prone part of starting an Expo project, and when it is wrong the symptom is an unhelpful "route not found" rather than a pointer to the broken link. `reset-project` then removes the demo, so the pre-wiring is kept without inheriting 20 files of themed-component boilerplate.
+**Rejected:** `blank-typescript`, which produces only files Clint wrote but requires installing expo-router, changing the entry point, registering the plugin and authoring `_layout.tsx` by hand on a first mobile app. Also rejected: keeping the demo and deleting it piecemeal, since `reset-project` exists to do exactly that and preserves the demo under `example/` for reference.
+
+---
+
+## 2026-09-11 - Screens live in `src/app`, not root `app/`
+
+**What:** Adopt the template's layout. Screens in `src/app`, plain TypeScript in `src/lib`. `CLAUDE.md` section 4 updated to match in the same turn.
+**Why:** Expo SDK 57 generates `src/app` and its `tsconfig.json` maps `@/*` to `./src/*`, so every generated import and every current Expo doc assumes it. Expo Router supports a root `app/` equally well, but diverging means fighting the template forever for no functional gain. The rule the folder shape exists to enforce, business logic never inside a screen file, is untouched by where the folder sits.
+**Rejected:** Root-level `app/` and `lib/` as originally written in CLAUDE.md, which would have left generated files and docs referencing `src/` paths that no longer exist.
+
+---
+
+## 2026-09-11 - The scaffolder's `Initial commit` is deleted
+
+**What:** After scaffolding, `rm -rf .git`, then Clint runs `git init` and authors the first commit himself.
+**Why:** `create-expo-app` runs `git init` and immediately commits as `Initial commit`. The project rule is that every commit is Clint's, and a tool-authored commit at the root of the history contradicts that on line one. The generated `.gitignore` is kept, since it correctly excludes `node_modules/` and `.expo/`.
+**Rejected:** Keeping the automatic commit as a pristine template baseline for diffing. Real but minor value, and the same diff is available from the published template at any time.
+
+---
+
+## 2026-09-11 - `example/` excluded from tsconfig
+
+**What:** Added `"exclude": ["node_modules", "example"]` to `tsconfig.json`.
+**Why:** `reset-project` moves the demo into `example/` but does not update its imports, which still use the `@/*` alias now pointing at `src/*`. The result is 25+ `TS2307 Cannot find module` errors on every typecheck, none of them real. Left alone, this trains the habit of ignoring typecheck output, which is exactly how a real error gets missed later.
+**Rejected:** Deleting `example/` outright, which loses a working reference for tab navigation and themed components before those are built. Also rejected: fixing the demo's imports, which is work spent on code that will be deleted.
+
+---
+
+## 2026-09-11 - Draft screen reads a hardcoded array, before build steps 1-5
+
+**What:** `src/app/index.tsx` renders `SAMPLE_SHOPS` from `src/lib/dev/sample-shops.ts`. Fabricated shops, unroutable numbers, sorted by distance. Both files are deleted at build step 4. Moved out of `src/lib/shops/` the same day: that namespace is reserved for code handling real field-collected data, and fabricated records must not share it.
+**Why:** Clint needed something on the phone to learn React Native against, before the database exists. The spec rule this appears to break, "screens built against the network get retrofitted badly", targets screens that *fetch*. This one reads a local array, which is the same shape the real screen has under an offline-first architecture, so it rehearses the final structure instead of a discarded one. The `Shop` type mirrors spec section 5 so the later swap changes the data source, not the screen.
+**Rejected:** Waiting until after step 5 to render anything, which would have meant learning React Native and the database at the same time on a first mobile app. Also rejected: wiring the draft screen to Supabase for "realism", which is precisely what the spec rule forbids and what creates the retrofit.
+
+---
+
+## 2026-09-11 - Working cadence: weekly call plus an event trigger on data batches
+
+**What:** A weekly 30-minute joint call on a fixed day, plus an event trigger: any shop batch the co-founder submits is validated within 24 hours, and his first three shops are reviewed the same day before a fourth is collected. Each cycle produces a shop count with flags, one session-log line naming the current build step, and any joint decision written here.
+**Why:** The only failure mode a cadence actually prevents on this project is a large batch of field data collected in the wrong shape. Photo-sourcing errors cannot be fixed remotely and require physically revisiting the shop, so the cost of catching them late is measured in trips across Metro Manila. Development itself needs no calendar: the 13-step build order already supplies sequence and pass/fail criteria, which is what a sprint goal would otherwise provide.
+**Rejected:** Two-day sprints, because steps 1 to 5 produce no user-visible deliverable and fixed timeboxes against pass/fail gates of unknown length teach the deadline to be ignored. Cadence tied to app updates or builds. Retrospectives, as ceremony for a two-person team that talks anyway. Shop count as the project progress metric, which would reward collection volume over correctness on exactly the data where correctness is expensive to fix.
+
+**Correction to the reasoning as originally drafted:** it claimed "build quota is not a constraint because development runs on a dev client and consumes no builds." That is wrong. A dev client is itself a build, and a fresh one is required every time native dependencies change, which is why the step 6 batching amendment below exists at all. Preview builds shared with the co-founder also consume quota. What is free is JavaScript iteration once a dev client exists. The accurate statement: builds are consumed by the initial dev client, by each native dependency change, and by each preview build shared with the co-founder, totalling roughly 4 to 6 for all of v1 against a limit of 15 per month.
+
+---
+
+## OPEN - Amendment to build order step 1: synthetic seed data
+
+Proposed, not settled. Needs a joint decision because it changes the schema.
+
+**Proposal:** seed 20 clearly-marked synthetic shops (`TEST_SHOP_01` style) instead of blocking step 1 on real field data. Steps 2 to 5 run entirely on synthetic data. A gate before step 13 confirms all synthetic rows are removed.
+
+**Why it is worth doing:** it removes the worst scheduling dependency in the project. Steps 2 to 5 need data, not real data, and blocking five build steps on field collection nobody controls is a bad trade.
+
+**Three unresolved problems:**
+
+1. **The marker is too weak.** A name prefix is a string convention. Cleanup by `LIKE 'TEST_SHOP%'` misses any row that was renamed, and nothing prevents a synthetic row being edited into looking real. This also contradicts the standing rule that fabricated shop records must never risk mixing with the field-collected set. A reliable marker means a nullable `is_synthetic boolean not null default false` column, which follows the same schema-door pattern the spec already blesses for `users.role` and `ratings.user_id`, and makes the step 13 gate a one-line count instead of a string match. Adding it is a schema change and therefore a joint decision.
+
+2. **`photo_source` has no honest value for a fabricated row.** It is `not null` and allows only `team_captured` or `shop_permission`. Writing either onto a shop nobody visited puts a falsehood in the one column that encodes the project's photo-sourcing commitment. This also raises a question about the spec itself: a real shop recorded on Monday and photographed on Friday has no photo source in between, so `photo_source` may be more correct as nullable whenever `photo_url` is null.
+
+3. **The step 3 security gate would pass vacuously.** The gate confirms no email address and no unpublished rating is readable with the public key. An empty `ratings` table returns nothing whether or not RLS is working, so the gate would record a pass having proven nothing, and retire the question. The synthetic seed must therefore include at least one rating in `pending` state carrying an email address, so that "nothing came back" means something came back was possible.
+
+---
+
+## OPEN - Amendment to step 6: batch native dependencies into one build
+
+Proposed, not settled, but no objection to it.
+
+**Proposal:** add the map library, location, local store and error tracking in a single build rather than incrementally.
+
+**Why:** each native dependency change requires a fresh dev client build against a 15-per-month free limit. Batching four changes into one build costs one build instead of four. The only cost is a larger surface to debug if that build fails, which is mitigated by adding the packages one at a time locally and building once at the end.
+
+---
+
+## 2026-09-11 - App name: Ayos. Package identifier: io.github.yoimuri.ayos
+
+**What:** The app is named **Ayos**. Android package identifier `io.github.yoimuri.ayos`, Expo slug `ayos`, deep-link scheme `ayos://`. Closes the "App name" item that was open in build spec section 13.
+**Why:** Taglish-first is already the decided default for UI strings, and "ayos" is the word a rider actually uses for the outcome he wants. It describes the rider's result, being sorted out, rather than making a claim about any shop, so it stays inside the rule that the app locates and never judges competence. The package identifier uses reverse-DNS of `yoimuri.github.io`, a domain Clint genuinely controls, rather than a `com.` form implying ownership of a domain he does not have.
+**Rejected:** `com.yoimuri.ayos`, which reads more like a product but asserts control of `yoimuri.com`. Deferring the identifier until the Play Store step, rejected because the co-founder needs an installable build now and the identifier stays freely changeable until first publication at step 13 anyway.
+
+**Watch:** the identifier is permanent once the app is published to the Play Store. Revisit it deliberately at step 13, especially if the project acquires its own domain before then.
+
+---
+
+## 2026-09-11 - `expo-updates` added, so one build serves many changes
+
+**What:** Installed `expo-updates ~57.0.21` and ran `eas update:configure` before the first preview build. This wrote `runtimeVersion: {policy: "appVersion"}` and `updates.url` into `app.json`, and created the `preview` channel and branch on EAS.
+**Why:** The co-founder needs a build he can run on his own phone and connection while Clint is away. Without `expo-updates` compiled in, that APK can never receive an over-the-air update, so every change he needed to see would cost another build against the 15-per-month free limit. Installing it before the first build means one build now and free JavaScript updates thereafter. Installing it after would have wasted that build, since it is a native package and cannot be added over the air.
+**Rejected:** Building without it and cutting a fresh preview build per change, which trades a free resource for a scarce one. The package is not listed in build spec section 10, so it was raised as a dependency decision rather than added silently; Clint approved by running the step.
+
+**How the safety fence works:** `runtimeVersion` is set by the `appVersion` policy, so it tracks `version` in `app.json`, currently `1.0.0`. An update only reaches a build whose runtime version matches. When native dependencies change at step 6, that value must change too, so older builds stop receiving updates rather than receiving JavaScript that calls native code they do not contain.
