@@ -118,3 +118,41 @@ Proposed, not settled, but no objection to it.
 **Rejected:** Building without it and cutting a fresh preview build per change, which trades a free resource for a scarce one. The package is not listed in build spec section 10, so it was raised as a dependency decision rather than added silently; Clint approved by running the step.
 
 **How the safety fence works:** `runtimeVersion` is set by the `appVersion` policy, so it tracks `version` in `app.json`, currently `1.0.0`. An update only reaches a build whose runtime version matches. When native dependencies change at step 6, that value must change too, so older builds stop receiving updates rather than receiving JavaScript that calls native code they do not contain.
+
+---
+
+## 2026-09-12 - AsyncStorage added, which costs one build
+
+**What:** Installed `@react-native-async-storage/async-storage` at 2.2.0, the version Expo SDK 57 pins. One JSON blob under the key `ayos.settings.v1` holds language, theme, area, motorcycle and the onboarded flag.
+**Why:** Theme persistence, language persistence and "ask the first-run questions once only" all require writing to the phone's disk, and every storage option in React Native is a native module. JavaScript alone cannot reach disk. One key holding one blob rather than five separate keys: five keys means five reads on launch and five chances to disagree after a partial write.
+**Rejected:** `expo-sqlite`, which is the right size for the shop local store at build step 4 but far too much machinery for five preference values, and whose choice is still an open decision in spec section 13. Also rejected: keeping settings in memory only, which would have shipped over the air with no new build but would forget the rider's language every time they closed the app.
+
+**Consequence, stated plainly:** this version cannot reach the existing APK over the air. Native code changed, so the phone needs a new install. Build budget: 2 of 15. Every JavaScript change after this one is free again.
+
+---
+
+## 2026-09-12 - Contact is two buttons: Call and Message
+
+**What:** The shop screen offers Call and Message side by side instead of a single Call button. Both use `Linking` with `tel:` and `sms:`, so no extra native package was needed.
+**Why:** A rider standing beside a running engine, or in traffic, often cannot hold a conversation but can send and read a text. Spec 4.2 says contact must never be more than one tap away; it does not say contact means voice. The list row still shows a single call affordance, because a row has no space for two and the shop screen is one tap away.
+**Rejected:** `expo-sms`, which would have added a native module for something `Linking` already does. Also rejected: a single Contact button opening a chooser, which puts a decision between the rider and the phone number.
+
+---
+
+## 2026-09-12 - Scope additions accepted on Clint's instruction
+
+**What:** Three things now in the code that are not in build spec section 3: social contact links on a shop (`socials`), dark mode, and first-run questions that ask area and motorcycle type.
+**Why:** Requested directly on 12 Sep 2026 after the cost of each was stated. Recorded here rather than added silently, because the standing rule is that anything outside section 3 goes on a list for a joint decision. These are in the draft screens and the fabricated sample data only; none of them exist in the database schema, so nothing is committed until the schema is written at build step 1.
+**Rejected:** Nothing yet. The spec has not been amended. If these stay, section 3 and section 5 both need updating, and the co-founder needs to agree, since `socials` is data he would have to collect from every shop.
+
+**Open problem with the motorcycle question:** it stores an answer nothing can use. Matching a rider's bike against a shop requires shops to record what they service, which is P6 on the design canvas and does not exist. The question is built so the plumbing is ready; until P6 lands it is a preference with no consumer.
+
+---
+
+## 2026-09-12 - Expo patch mismatches are deferred to the next native build
+
+**What:** `expo doctor` fails on every build with 14 patch version mismatches (`expo` 57.0.21 found, ~57.0.22 expected, and similar for 13 more). Leaving them until the step 6 build, when MapLibre goes in, and taking them in the same build. Recorded in `CLAUDE.md` section 2A so it is not re-diagnosed every session.
+**Why:** Confirmed against the npm registry that Expo ships SDK 57 patches roughly weekly and these landed on 11 Sep, the day this project was scaffolded; `package-lock.json` correctly pins what was current at the time, so nothing in the repo caused it. Doctor is a pre-flight advisory and does not stop the build, verified by build 2 compiling through this exact failure. Every one of the 14 is a native module, so applying them costs one of fifteen monthly builds, and they are bug fixes for bugs this project is not hitting.
+**Rejected:** Fixing them immediately, which spends a build on patch bumps alone. Also rejected: `npm audit fix --force`, which would move packages off the versions the SDK pins and is a larger risk than the moderate advisories it would silence. Also rejected: adding the packages to `expo.install.exclude` to silence doctor, which hides the signal that would matter if a real security advisory ever appeared in the same check.
+
+**Re-check trigger:** a doctor or audit message naming a specific security advisory rather than a version mismatch. That is a different message and is acted on immediately, not deferred.

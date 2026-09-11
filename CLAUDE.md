@@ -165,6 +165,73 @@ Any tutorial using `anon` or `service_role` keys is out of date. Reject it.
 
 ---
 
+## 2A. Known warnings that are NOT problems
+
+Read this before diagnosing any of the following. Each one has already been investigated,
+with the evidence recorded. Do not re-investigate from scratch, and do not "fix" one without
+reading why it was left.
+
+### `expo doctor` reports patch version mismatches on every build
+
+```
+✖ Check that packages match versions required by installed Expo SDK
+   expo  expected ~57.0.22  found 57.0.21     (and ~13 more)
+   Command "expo doctor" failed.
+```
+
+**This does not fail the build.** Doctor is a pre-flight advisory. Build 2 ran through this
+exact failure and kept compiling.
+
+**Cause, confirmed 12 Sep 2026 against the npm registry:** Expo publishes SDK 57 patch
+releases roughly weekly. `expo` 57.0.21 shipped 8 Sep and 57.0.22 shipped 11 Sep;
+`expo-router` 57.0.20 shipped 8 Sep and 57.0.21 shipped 11 Sep. The project was scaffolded on
+11 Sep and `package-lock.json` pins what was current then. Nothing in this repo caused it.
+
+**The list will grow.** By build order step 6 it may name twenty packages. Still normal.
+
+**When to fix:** batched with the next native build, never as its own. All of these are native
+modules, so updating them costs one of fifteen monthly builds, and patch releases are bug
+fixes for bugs this project is not currently hitting.
+
+```bash
+npx expo install --check     # review and accept the bumps
+npx tsc --noEmit             # confirm nothing broke
+eas build --platform android --profile preview
+```
+
+**What WOULD be urgent:** a security advisory naming a specific package. That is a different
+message from this one and should be acted on immediately.
+
+### `npm audit` reports moderate vulnerabilities
+
+14 as of 12 Sep 2026, all inside `@expo/*` build tooling: the CLI, config plugins, Metro
+config. Verified with `npm audit --omit=dev`. These run on the developer machine and are never
+compiled into the APK, so nothing reaches a rider. Expo's dependency tree to fix, not this
+project's. Do not run `npm audit fix --force`, which would move packages off the versions the
+SDK pins and is a far bigger risk than the advisories.
+
+### TypeScript errors after adding a screen
+
+```
+Argument of type '"/settings"' is not assignable to parameter of type ...
+```
+
+`app.json` sets `experiments.typedRoutes: true`, so Expo Router generates a union of every
+route into `.expo/types/router.d.ts`. That file is only rewritten while Metro runs. A new
+screen therefore produces confident-looking type errors in correct code.
+
+**Fix:** start the dev server once (`npx expo start`), wait for it to regenerate, stop it.
+Cost 23 seconds on 12 Sep 2026. Do not edit the generated file and do not change the code.
+
+### The build takes 20 to 40 minutes
+
+Free tier means a low-priority queue behind paying customers, then a fresh machine with no
+cached `node_modules`, then Gradle compiling React Native's C++ and Kotlin plus seven native
+modules. Build 1 took 21 minutes. Nothing is stuck. `Ctrl+C` stops the CLI watching, not the
+build, which continues on Expo's servers.
+
+---
+
 ## 3. Offline-first (architecture, not a feature)
 
 The app reads from a local copy. The network refreshes that copy and submits ratings.
