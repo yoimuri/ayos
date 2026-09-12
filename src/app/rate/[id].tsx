@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BrandBar } from '@/components/BrandBar';
+import { StarRating } from '@/components/StarRating';
 import { findShop } from '@/lib/dev/sample-shops';
 import { useSettings } from '@/lib/settings/store';
 
@@ -29,14 +31,22 @@ export default function RateScreen() {
   const shop = findShop(String(id));
 
   const [stars, setStars] = useState(0);
+  /*
+    MOCK ATTACHMENTS. Choosing a real photo needs `expo-image-picker`, which is a
+    native module: it cannot ship over the air and costs a build. These chips prove
+    the flow and the layout; the picker is wired in the same build as MapLibre.
+  */
+  const [proof, setProof] = useState<{ kind: 'photo' | 'video'; label: string }[]>([]);
   const [body, setBody] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  /* Frozen while a star drag is in progress, so the page cannot slide underneath it. */
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const s = styles(theme);
 
-  if (!shop) return <SafeAreaView style={s.screen} edges={['top']} />;
+  if (!shop) return <SafeAreaView style={s.screen} edges={['top', 'bottom']} />;
 
   /*
     A rating needs a star value, a name and something email-shaped. The text is
@@ -48,14 +58,14 @@ export default function RateScreen() {
 
   if (sent) {
     return (
-      <SafeAreaView style={s.screen} edges={['top']}>
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={s.doneWrap}>
           <View style={s.doneBadge}>
             <Text style={s.doneGlyph}>✓</Text>
           </View>
           <Text style={s.doneTitle}>Check your email</Text>
           <Text style={s.doneBody}>
-            Your {stars}-star rating of {shop.name} is saved but hidden. It appears once you tap
+            Your {stars.toFixed(1)}-star rating of {shop.name} is saved but hidden. It appears once you tap
             the link we sent to {email.trim()}.
           </Text>
 
@@ -76,34 +86,66 @@ export default function RateScreen() {
   }
 
   return (
-    <SafeAreaView style={s.screen} edges={['top']}>
-      <View style={s.head}>
-        <Pressable onPress={() => router.back()} style={s.closeBtn} hitSlop={8} accessibilityRole="button">
-          <Text style={s.closeGlyph}>✕</Text>
-        </Pressable>
-        <Text style={s.headTitle} numberOfLines={1}>
-          {t.rateShop(shop.name)}
-        </Text>
-      </View>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      <BrandBar title={t.rateShop(shop.name)} close />
 
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-        <View style={s.starRow}>
-          {[1, 2, 3, 4, 5].map((n) => (
+      <ScrollView
+        contentContainerStyle={s.body}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={scrollEnabled}
+      >
+        <StarRating
+          value={stars}
+          onChange={setStars}
+          onDragStart={() => setScrollEnabled(false)}
+          onDragEnd={() => setScrollEnabled(true)}
+        />
+
+        <View style={s.field}>
+          <Text style={s.label}>Add proof (optional)</Text>
+          <View style={s.proofRow}>
             <Pressable
-              key={n}
-              onPress={() => setStars(n)}
-              hitSlop={6}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: stars === n }}
-              accessibilityLabel={`${n} of 5`}
+              onPress={() =>
+                setProof((p) => [...p, { kind: 'photo', label: `Photo ${p.length + 1}` }])
+              }
+              style={s.proofBtn}
+              accessibilityRole="button"
             >
-              <Text style={[s.star, n <= stars && s.starOn]}>★</Text>
+              <Text style={s.proofBtnLabel}>+ Photo</Text>
             </Pressable>
-          ))}
+            <Pressable
+              onPress={() =>
+                setProof((p) => [...p, { kind: 'video', label: `Video ${p.length + 1}` }])
+              }
+              style={s.proofBtn}
+              accessibilityRole="button"
+            >
+              <Text style={s.proofBtnLabel}>+ Video</Text>
+            </Pressable>
+          </View>
+
+          {proof.length > 0 && (
+            <View style={s.chipRow}>
+              {proof.map((item, i) => (
+                <Pressable
+                  key={`${item.label}-${i}`}
+                  onPress={() => setProof((p) => p.filter((_, j) => j !== i))}
+                  style={s.chip}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item.label}`}
+                >
+                  <Text style={s.chipText}>{item.label}</Text>
+                  <Text style={s.chipX}>✕</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <Text style={s.help}>
+            Demonstration only. Picking a real file needs a native module that ships with the
+            next build, so these are placeholders.
+          </Text>
         </View>
-        <Text style={s.starHint}>
-          {stars === 0 ? 'Tap a star' : `${stars} of 5`}
-        </Text>
 
         <View style={s.field}>
           <Text style={s.label}>{t.whatHappened}</Text>
@@ -176,25 +218,33 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.bg },
 
-    head: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.line,
-    },
-    closeBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-    closeGlyph: { fontSize: 20, color: theme.ink },
-    headTitle: { fontSize: 16, fontWeight: '700', color: theme.ink, flexShrink: 1 },
 
     body: { padding: 18, gap: 17, paddingBottom: 40 },
 
-    starRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', paddingTop: 6 },
-    star: { fontSize: 46, color: theme.line },
-    starOn: { color: theme.accent },
-    starHint: { fontSize: 13, color: theme.ink3, textAlign: 'center', marginTop: -6 },
+    proofRow: { flexDirection: 'row', gap: 10 },
+    proofBtn: {
+      flex: 1,
+      height: 48,
+      borderRadius: 11,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: theme.line,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    proofBtnLabel: { fontSize: 15, fontWeight: '600', color: theme.ink2 },
+    chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: theme.callFill,
+    },
+    chipText: { fontSize: 13, fontWeight: '600', color: theme.call },
+    chipX: { fontSize: 13, color: theme.call },
 
     field: { gap: 7 },
     label: { fontSize: 14, fontWeight: '600', color: theme.ink2 },
@@ -214,13 +264,13 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     submit: {
       height: 60,
       borderRadius: 13,
-      backgroundColor: theme.ink,
+      backgroundColor: theme.call,
       alignItems: 'center',
       justifyContent: 'center',
     },
     /* Disabled is visibly different, not just unresponsive. */
     submitOff: { backgroundColor: theme.line },
-    submitLabel: { fontSize: 18, fontWeight: '700', color: theme.bg },
+    submitLabel: { fontSize: 18, fontWeight: '700', color: theme.onFilled },
     submitLabelOff: { color: theme.ink3 },
 
     offline: {

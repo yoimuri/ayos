@@ -44,7 +44,6 @@ export type Strings = {
   ratingCount: (n: number) => string;
   averageHidden: string;
   rateThisShop: string;
-  metres: string;
   km: string;
 
   // Rate
@@ -84,6 +83,10 @@ export type Strings = {
   notSet: string;
   about: string;
   aboutBody: string;
+  draftNotice: string;
+  searchRadius: string;
+  allCities: string;
+  developer: string;
 };
 
 const en: Strings = {
@@ -116,7 +119,6 @@ const en: Strings = {
   ratingCount: (n) => (n === 1 ? '1 rating' : `${n} ratings`),
   averageHidden: 'The average appears once there are 5 ratings.',
   rateThisShop: 'Rate this shop',
-  metres: 'METRES',
   km: 'KM',
 
   rateShop: (name) => `Rate ${name}`,
@@ -138,7 +140,7 @@ const en: Strings = {
   chooseArea: 'Where in Metro Manila?',
   chooseAreaHelp: 'We use this only to sort your first list. Your exact location is never stored.',
   chooseBike: 'What do you ride?',
-  chooseBikeHelp: 'Not used yet. It will matter once shops record which bikes they service.',
+  chooseBikeHelp: 'This helps us learn what riders in Metro Manila actually ride, so we collect the right shops.',
   chooseTheme: 'Light or dark?',
   themeLight: 'Light',
   themeDark: 'Dark',
@@ -156,7 +158,12 @@ const en: Strings = {
   notSet: 'Not set',
   about: 'About Ayos',
   aboutBody:
-    'Ayos locates motorcycle shops. It does not rate how good they are. Shops are ordered by distance, never by rating.',
+    'Ayos shows you the motorcycle shops nearest to you and keeps them on your phone, so the list opens and the numbers work even with no signal. It locates shops. It does not rate how good they are, and shops are always ordered by distance, never by rating.',
+  draftNotice:
+    "This is a draft build with sample functionalities. This is subject to changes so kalikutin mo lang hangga't gusto mo.",
+  searchRadius: 'Search radius',
+  allCities: 'All cities',
+  developer: 'Build info',
 };
 
 const tl: Strings = {
@@ -190,7 +197,6 @@ const tl: Strings = {
   ratingCount: (n) => (n === 1 ? '1 rating' : `${n} na rating`),
   averageHidden: 'Lalabas ang average kapag umabot na sa 5 na rating.',
   rateThisShop: 'I-rate ang shop na ito',
-  metres: 'METRO',
   km: 'KM',
 
   rateShop: (name) => `I-rate ang ${name}`,
@@ -214,7 +220,7 @@ const tl: Strings = {
     'Ginagamit lang ito para sa unang listahan mo. Hindi namin iniimbak ang eksaktong location mo.',
   chooseBike: 'Anong sinasakyan mo?',
   chooseBikeHelp:
-    'Hindi pa ito gamit. Magagamit ito kapag may record na ang mga shop kung anong motor ang inaayos nila.',
+    'Nakakatulong ito para malaman namin kung anong motor talaga ang ginagamit sa Metro Manila, para tama ang mga shop na kokolektahin namin.',
   chooseTheme: 'Light o dark?',
   themeLight: 'Light',
   themeDark: 'Dark',
@@ -232,12 +238,29 @@ const tl: Strings = {
   notSet: 'Wala pa',
   about: 'Tungkol sa Ayos',
   aboutBody:
-    'Naghahanap ng motor shop ang Ayos. Hindi nito hinuhusgahan kung magaling sila. Ayon sa layo ang pagkakasunod, hindi sa rating.',
+    "Ipinapakita ng Ayos ang mga motor shop na pinakamalapit sa'yo, at naka-save sila sa phone mo kaya bumubukas ang listahan at gumagana ang mga numero kahit walang signal. Naghahanap lang ito ng shop. Hindi nito hinuhusgahan kung magaling sila, at ayon sa layo ang pagkakasunod, hindi sa rating.",
+  draftNotice:
+    "This is a draft build with sample functionalities. This is subject to changes so kalikutin mo lang hangga't gusto mo.",
+  searchRadius: 'Lawak ng hanap',
+  allCities: 'Lahat ng lugar',
+  developer: 'Build info',
 };
 
 export const STRINGS: Record<Language, Strings> = { en, tl };
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
-  en: 'English',
-  tl: 'Taglish',
+  en: 'English (United States)',
+  tl: 'Taglish (Filipino)',
+};
+
+/**
+ * Flags as the language marker.
+ *
+ * The one place an emoji earns its keep here: a flag is recognised faster than a word,
+ * and a rider scanning Settings finds their language without reading. Everywhere else
+ * in the app icons are drawn, not typed.
+ */
+export const LANGUAGE_FLAGS: Record<Language, string> = {
+  en: '🇺🇸',
+  tl: '🇵🇭',
 };

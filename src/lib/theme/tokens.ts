@@ -1,9 +1,16 @@
 /**
- * Colour tokens for Direction D, light and dark.
+ * Colour tokens, light and dark.
  *
  * Nothing in a screen file should ever write a raw hex value. Screens ask for
  * `theme.call` and get the right colour for whichever mode the rider chose, so a
- * palette change happens here once instead of in thirty places.
+ * palette change happens here once instead of in thirty places. This file is the
+ * reason the whole brand could be swapped in one edit.
+ *
+ * PALETTE: oxide. The red-brown of the primer that goes on bare metal before anything
+ * else — a colour every mechanic has seen on a frame. Chosen because Grab owns bright
+ * green and Lalamove owns orange, and the previous palette used a green close to one
+ * and an amber inside the other, so the app read as a mix of two apps the rider
+ * already had rather than as itself.
  */
 
 export type ThemeName = 'light' | 'dark';
@@ -23,62 +30,102 @@ export type Theme = {
   ink: string;
   ink2: string;
   ink3: string;
-  /** The amber accent. Used for the radius ring and the staleness state, nothing else. */
+
+  /**
+   * The brand band at the top of every screen, and the text that sits on it.
+   *
+   * These are the one pair that does NOT simply lighten between themes. In light, the
+   * band IS the brand colour and its text is white. In dark, the band becomes a dark
+   * surface and the BRAND COLOUR MOVES TO THE TEXT — because a bright band on a dark
+   * app glares, and lifting oxide far enough to survive on black turns it salmon.
+   */
+  bandBg: string;
+  bandInk: string;
+  /** Quieter text on the band: the area label, the saved-count line. */
+  bandInk2: string;
+  /** Translucent chips sitting on the band. */
+  bandChip: string;
+
+  /** The oxide itself, for controls and emphasis. Brand colour on a control, always. */
   accent: string;
   accentFill: string;
-  /** Green. Reserved for contact actions and the offline-ready line. */
+  /** Primary actions: Call, Send. Same oxide, named for its job. */
   call: string;
   callFill: string;
-  /** Red. Closed shops and blocked actions only. */
+  /** Green. ONLY for "Open". It is semantic, not brand. */
+  open: string;
+  openFill: string;
+  /** Red. Real problems only — no connection, blocked action. Never "Closed". */
   alert: string;
   alertFill: string;
-  /** Text drawn on top of a filled `call` or `ink` button. */
+  /** Rating stars. Gold in both themes, because gold is semantic, not brand. */
+  star: string;
+  /** Text drawn on top of a filled `call` button. */
   onFilled: string;
 };
 
 export const LIGHT: Theme = {
-  bg: '#FFFFFF',
+  bg: '#FAF7F2',
   surface: '#FFFFFF',
-  mapBg: '#F1F2EE',
-  mapLine: '#E2E5DE',
-  line: '#DADED5',
-  lineSoft: '#E6E9E2',
-  ink: '#12161C',
-  ink2: '#555E64',
-  ink3: '#7C858B',
-  accent: '#C9700A',
-  accentFill: '#FBEFDC',
-  call: '#0B6E45',
-  callFill: '#DFF0E7',
-  alert: '#A82A21',
+  mapBg: '#F0EBE2',
+  mapLine: '#E0D8CC',
+  line: '#DFD8CE',
+  lineSoft: '#EBE5DC',
+  ink: '#191716',
+  ink2: '#57514C',
+  ink3: '#8A827B',
+
+  bandBg: '#B4442A',
+  bandInk: '#FFFFFF',
+  bandInk2: '#F0C4B7',
+  bandChip: 'rgba(255,255,255,0.18)',
+
+  accent: '#B4442A',
+  accentFill: '#F6E4DD',
+  call: '#B4442A',
+  callFill: '#F6E4DD',
+  open: '#2F7A52',
+  openFill: '#DCEFE3',
+  alert: '#A8321F',
   alertFill: '#F7E3E1',
+  star: '#D99100',
   onFilled: '#FFFFFF',
 };
 
 /**
- * Dark is not an inversion of light.
+ * Dark is not an inversion.
  *
- * The accent and the green are both lifted and desaturated, because a colour tuned
- * for white will vibrate against a dark ground and fail contrast in the other
- * direction. Each pair was chosen against its own background.
+ * The oxide is lifted and desaturated because a red tuned against bone vibrates
+ * against near-black and loses contrast the other way. Each pair was picked against
+ * its own background rather than derived from the light one.
  */
 export const DARK: Theme = {
-  bg: '#101417',
-  surface: '#191E22',
-  mapBg: '#1A1F23',
-  mapLine: '#272D31',
-  line: '#2C3338',
-  lineSoft: '#242A2F',
-  ink: '#E9EDE6',
-  ink2: '#9EA8A4',
-  ink3: '#77817E',
-  accent: '#F0A340',
-  accentFill: '#33260F',
-  call: '#3DB380',
-  callFill: '#11301F',
+  bg: '#14120F',
+  surface: '#1C1A16',
+  mapBg: '#1F1C18',
+  mapLine: '#2C2823',
+  line: '#332F29',
+  lineSoft: '#272320',
+  ink: '#EDE8E0',
+  ink2: '#A79E94',
+  ink3: '#7E766D',
+
+  /* The band goes dark and the wordmark takes the brand colour. See the type above. */
+  bandBg: '#1C1A16',
+  bandInk: '#D9694B',
+  bandInk2: '#7E766D',
+  bandChip: 'rgba(255,255,255,0.07)',
+
+  accent: '#D9694B',
+  accentFill: '#3A211A',
+  call: '#D9694B',
+  callFill: '#3A211A',
+  open: '#4FAE7C',
+  openFill: '#12301F',
   alert: '#E86B60',
   alertFill: '#351815',
-  onFilled: '#101417',
+  star: '#E8A72B',
+  onFilled: '#14120F',
 };
 
 export const THEMES: Record<ThemeName, Theme> = { light: LIGHT, dark: DARK };

@@ -209,5 +209,30 @@ determines whether the step 3 gate is a real test.
   `CLAUDE.md` section 2A: this one, the npm audit noise, the typed-routes errors after adding
   a screen, and the build queue time.
 
+- `2026-09-12` - App built out over the air across ~8 updates, no new build: map placeholder,
+  city dropdown, adjustable radius, search, half-star drag rating, review sheets with photo
+  placeholders, offline banner, contact chooser, shop overviews, Taglish reviews, drawn gear
+  and contact icons, About dialog. 20 sample shops across 7 cities. `docs/BACKLOG.md` created
+  and holds everything deferred. Two bugs still open: the navigation-bar inset (numbers now
+  printed in Settings, Clint to report) and `runtimeVersion` never changing on native changes.
+
+**Design canvas warning (12 Sep 2026):** the Ayos Screen Flow artifact
+(claude.ai/code/artifact/bb645098-3880-4c08-9bfc-2fb3d5f59016) was edited and saved from the
+canvas view itself, so the published version is now AHEAD of the working files that were used
+to seed it. Re-seeding from those old files would silently discard those edits. Before
+changing the canvas again, read the published artifact and extract it back into fresh working
+files first, then edit those. Never re-seed from memory of what it used to contain.
+
+- `2026-09-12` - v2 visual identity shipped over the air: oxide palette replacing the
+  green-and-amber accents, a brand band on every screen carrying the wordmark, circular
+  contact buttons, Closed rendered grey instead of red, gold star token, and a rough
+  travel estimate under each distance. `ScreenHeader` replaced by `BrandBar`. Typecheck
+  clean. No build used: the whole change is JavaScript.
+
+- `2026-09-12` - Wordmark font shipped over the air (Archivo instanced to wdth 115 /
+  wght 560, 14 KB, no build needed - expo-font was already native). Home restructured:
+  the map now fills the screen behind a draggable shop sheet with three snap positions.
+  `MockMap` measures itself instead of a fixed 260px box. Typecheck clean.
+
 **Owed:** the README's Security and Current state sections need updating the moment Supabase
 exists, since environment variables and migrations are the part a stranger cannot guess.

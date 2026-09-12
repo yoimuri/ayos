@@ -43,6 +43,10 @@ export type Settings = {
   theme: ThemeName;
   area: Area | null;
   bike: BikeKind | null;
+  /** How far to search. Null means no limit. */
+  radiusM: number | null;
+  /** Draw the dashed search circle on the map. Some riders find it noise. */
+  showRadiusRing: boolean;
   /** False until the first-run questions are answered or skipped. */
   onboarded: boolean;
 };
@@ -52,6 +56,8 @@ const DEFAULTS: Settings = {
   theme: 'light',
   area: null,
   bike: null,
+  radiusM: 5000,
+  showRadiusRing: true,
   onboarded: false,
 };
 

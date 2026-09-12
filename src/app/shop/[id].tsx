@@ -2,6 +2,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ReviewList } from '@/components/ReviewList';
+import { BrandBar } from '@/components/BrandBar';
 import { findShop, splitDistance } from '@/lib/dev/sample-shops';
 import { useSettings } from '@/lib/settings/store';
 
@@ -27,16 +29,13 @@ export default function ShopScreen() {
 
   if (!shop) {
     return (
-      <SafeAreaView style={s.screen} edges={['top']}>
-        <Pressable onPress={() => router.back()} style={s.backRow} accessibilityRole="button">
-          <Text style={s.backGlyph}>‹</Text>
-          <Text style={s.backLabel}>{t.backToList}</Text>
-        </Pressable>
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+        <BrandBar title={t.backToList} />
       </SafeAreaView>
     );
   }
 
-  const { value, unit } = splitDistance(shop.distance_m);
+  const { value } = splitDistance(shop.distance_m);
   const statusLabel =
     shop.status === 'open'
       ? shop.openUntil
@@ -47,17 +46,17 @@ export default function ShopScreen() {
         : t.unknown;
 
   return (
-    <SafeAreaView style={s.screen} edges={['top']}>
-      <Pressable onPress={() => router.back()} style={s.backRow} accessibilityRole="button">
-        <Text style={s.backGlyph}>‹</Text>
-        <Text style={s.backLabel}>{t.backToList}</Text>
-      </Pressable>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      <BrandBar title={t.backToList} />
 
-      <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.body}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.headRow}>
           <View>
             <Text style={s.distValue}>{value}</Text>
-            <Text style={s.distUnit}>{unit === 'km' ? t.km : t.metres}</Text>
+            <Text style={s.distUnit}>{t.km}</Text>
           </View>
           <View style={s.headText}>
             <Text style={s.name}>{shop.name}</Text>
@@ -89,46 +88,82 @@ export default function ShopScreen() {
           </View>
         </View>
 
-        {shop.phone ? (
-          <View style={s.actions}>
-            <Pressable
-              onPress={() => Linking.openURL(`tel:${shop.phone}`)}
-              style={[s.btn, s.btnCall]}
-              accessibilityRole="button"
-            >
-              <Text style={s.btnCallLabel}>{t.call}</Text>
-            </Pressable>
-            {/*
-              `sms:` is handled by the phone's own messaging app through Linking, so
-              this needs no extra native package and works with no data connection.
-            */}
-            <Pressable
-              onPress={() => Linking.openURL(`sms:${shop.phone}`)}
-              style={[s.btn, s.btnMessage]}
-              accessibilityRole="button"
-            >
-              <Text style={s.btnMessageLabel}>{t.message}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={s.noNumber}>
-            <Text style={s.noNumberText}>{t.noNumber}</Text>
+        {/*
+          Circular icon buttons with the label beneath, centred. A circle with a word
+          under it reads as one control; a box with text inside reads as a slab, and
+          three slabs took a third of the screen to say what three circles say.
+
+          Only Call is filled, so the primary action is obvious without any of them
+          shouting.
+
+          WHEN THERE IS NO NUMBER the contact buttons are not rendered at all. A
+          disabled button still looks like a control: a rider taps it, nothing happens,
+          and they conclude the app is broken. An absence with an explanation beats a
+          greyed-out promise.
+        */}
+        <View style={s.actions}>
+          {shop.phone ? (
+            <>
+              <Pressable
+                onPress={() => Linking.openURL(`tel:${shop.phone}`)}
+                style={s.actWrap}
+                accessibilityRole="button"
+                accessibilityLabel={t.call}
+              >
+                <View style={[s.actCircle, s.actFilled]}>
+                  {/* Plain handset here: this button only calls. The unified
+                      phone-and-envelope mark belongs on the list row, where one tap
+                      offers both. */}
+                  <Text style={s.actGlyphOn}>✆</Text>
+                </View>
+                <Text style={s.actLabel}>{t.call}</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => Linking.openURL(`sms:${shop.phone}`)}
+                style={s.actWrap}
+                accessibilityRole="button"
+                accessibilityLabel={t.message}
+              >
+                <View style={[s.actCircle, s.actOutline]}>
+                  <Text style={s.actGlyph}>✉</Text>
+                </View>
+                <Text style={s.actLabel}>{t.message}</Text>
+              </Pressable>
+            </>
+          ) : null}
+
+          <Pressable
+            onPress={() =>
+              Linking.openURL(`geo:0,0?q=${encodeURIComponent(`${shop.name}, ${shop.address}`)}`)
+            }
+            style={s.actWrap}
+            accessibilityRole="button"
+            accessibilityLabel={t.directions}
+          >
+            <View style={[s.actCircle, s.actOutline]}>
+              <Text style={s.actGlyph}>➤</Text>
+            </View>
+            <Text style={s.actLabel}>{t.directions}</Text>
+          </Pressable>
+        </View>
+
+        {!shop.phone && (
+          <View style={s.noticeBox}>
+            <Text style={s.noticeTitle}>No phone number yet</Text>
+            <Text style={s.noticeBody}>
+              We have not collected one for this shop. You can still get directions, and the
+              address below is correct as of the visit.
+            </Text>
           </View>
         )}
-
-        <Pressable
-          onPress={() =>
-            Linking.openURL(`geo:0,0?q=${encodeURIComponent(`${shop.name}, ${shop.address}`)}`)
-          }
-          style={[s.btn, s.btnDirections]}
-          accessibilityRole="button"
-        >
-          <Text style={s.btnDirectionsLabel}>{t.directions}</Text>
-        </Pressable>
 
         <View style={s.photo}>
           <Text style={s.photoNote}>FACADE PHOTO · TEAM CAPTURED</Text>
         </View>
+
+        {/* What the shop actually does, in plain words, before the tag shorthand. */}
+        <Text style={s.about}>{shop.about}</Text>
 
         <View style={s.tagRow}>
           {shop.tags.map((tag) => (
@@ -188,15 +223,7 @@ export default function ShopScreen() {
           {shop.ratingCount < 5 && <Text style={s.help}>{t.averageHidden}</Text>}
         </View>
 
-        {shop.ratings.map((rating) => (
-          <View key={rating.who} style={s.review}>
-            <View style={s.reviewHead}>
-              <Text style={s.reviewWho}>{rating.who}</Text>
-              <Text style={s.reviewStars}>{rating.stars} / 5</Text>
-            </View>
-            <Text style={s.reviewBody}>{rating.body}</Text>
-          </View>
-        ))}
+        <ReviewList reviews={shop.ratings} />
 
         <Pressable
           /*
@@ -218,17 +245,6 @@ export default function ShopScreen() {
 const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.bg },
-    backRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.line,
-    },
-    backGlyph: { fontSize: 30, color: theme.ink, width: 30, textAlign: 'center', lineHeight: 34 },
-    backLabel: { fontSize: 16, fontWeight: '600', color: theme.ink },
 
     body: { padding: 18, gap: 15, paddingBottom: 40 },
 
@@ -248,32 +264,38 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     pill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6 },
     pillText: { fontSize: 13, fontWeight: '700' },
-    pillOpen: { backgroundColor: theme.callFill },
-    pillOpenText: { color: theme.call },
-    pillClosed: { backgroundColor: theme.alertFill },
-    pillClosedText: { color: theme.alert },
+    pillOpen: { backgroundColor: theme.openFill },
+    pillOpenText: { color: theme.open },
+    pillClosed: { backgroundColor: theme.lineSoft },
+    pillClosedText: { color: theme.ink3 },
     pillUnknown: { backgroundColor: theme.mapBg },
     pillUnknownText: { color: theme.ink2 },
 
-    actions: { flexDirection: 'row', gap: 12 },
-    btn: { height: 62, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-    btnCall: { flex: 1, backgroundColor: theme.call },
-    btnCallLabel: { fontSize: 18, fontWeight: '700', color: theme.onFilled },
-    btnMessage: { flex: 1, backgroundColor: theme.callFill, borderWidth: 2, borderColor: theme.call },
-    btnMessageLabel: { fontSize: 18, fontWeight: '700', color: theme.call },
-    btnDirections: { borderWidth: 2, borderColor: theme.ink, backgroundColor: theme.surface },
-    btnDirectionsLabel: { fontSize: 18, fontWeight: '700', color: theme.ink },
-
-    noNumber: {
-      height: 62,
-      borderRadius: 13,
-      borderWidth: 2,
-      borderStyle: 'dashed',
-      borderColor: theme.line,
+    actions: { flexDirection: 'row', gap: 22, justifyContent: 'center' },
+    actWrap: { alignItems: 'center', gap: 7, width: 74 },
+    actCircle: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    noNumberText: { fontSize: 15, color: theme.ink3, fontStyle: 'italic' },
+    actFilled: { backgroundColor: theme.call },
+    actOutline: { borderWidth: 1.5, borderColor: theme.line, backgroundColor: theme.surface },
+    actGlyph: { fontSize: 21, lineHeight: 25, color: theme.ink },
+    actGlyphOn: { fontSize: 21, lineHeight: 25, color: theme.onFilled },
+    actLabel: { fontSize: 12, fontWeight: '600', color: theme.ink2 },
+    noticeBox: {
+      backgroundColor: theme.accentFill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.accent,
+      borderRadius: 12,
+      padding: 16,
+      gap: 6,
+    },
+    noticeTitle: { fontSize: 15, fontWeight: '700', color: theme.accent },
+    noticeBody: { fontSize: 14, color: theme.ink2, lineHeight: 20 },
+
 
     photo: {
       height: 150,
@@ -286,6 +308,7 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     },
     photoNote: { fontSize: 11, letterSpacing: 1, color: theme.ink3 },
 
+    about: { fontSize: 15, color: theme.ink2, lineHeight: 22 },
     tagRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     tag: {
       paddingHorizontal: 12,

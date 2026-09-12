@@ -5,6 +5,10 @@ Project root context file. Claude Code loads this every session.
 Scope lives in `docs/MOTO_APP_BUILD_SPEC.md`. That file wins on any scope question.
 This file covers setup, locked stack, and how work runs.
 
+`docs/BACKLOG.md` is what has NOT happened yet: the batch waiting for the next native
+build, proposals needing a joint decision, known gaps, and spec amendments now owed.
+Read it before planning any build, and add to it rather than relying on memory.
+
 Project location: `C:\Users\muri\Desktop\PROJECTS\moto-app`
 Verified 11 Sep 2026: this Desktop is a real local folder, not redirected into OneDrive.
 The OneDrive warning still applies to any other location.
