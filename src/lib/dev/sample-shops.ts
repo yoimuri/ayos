@@ -296,17 +296,42 @@ export const SAMPLE_SHOPS: Shop[] = [
   },
 ];
 /**
- * Always kilometres, two decimals. 145 m reads "0.15", 1240 m reads "1.20".
+ * DETOUR FACTOR.
  *
- * One unit everywhere means the numbers in a list are directly comparable at a glance.
- * Mixing "320 METRES" with "1.2 KM" forced a rider to read the unit before they could
- * compare two rows, and the metre figures were visually much larger for no reason.
- * Two decimals rather than one: at one decimal, 145 m and 490 m both round to "0.1" /
- * "0.5" and become indistinguishable in the list. Never rounds below 0.01, because
+ * Roads bend, so the distance a rider actually travels is always longer than the
+ * straight line between two points. The ratio between the two is called circuity, and
+ * in a dense city grid it sits somewhere around 1.2 to 1.4. 1.3 is the middle of that.
+ *
+ * This is an ASSUMED constant, not a measured one. The honest version is a routing
+ * engine answering "how far along actual streets" — P10 in docs/BACKLOG.md. Until that
+ * exists, this gets the displayed number closer to the truth than a straight line does,
+ * and everything that shows it marks it approximate so it is never read as exact.
+ *
+ * Calibrate it once real routing exists: run a sample of shops through both and adjust.
+ */
+export const DETOUR_FACTOR = 1.3;
+
+/**
+ * Straight-line metres in, approximate ROAD metres out.
+ *
+ * One function, used for BOTH the radius filter and the displayed number. That is
+ * deliberate: if the filter used the straight line and the display used the road
+ * estimate, a shop could pass a "within 1 km" filter and then render as 1.04 km, which
+ * looks like a bug to anyone reading the screen.
+ */
+export function roadDistance(metres: number): number {
+  return metres * DETOUR_FACTOR;
+}
+
+/**
+ * Always kilometres, two decimals, always marked approximate by the caller.
+ *
+ * Two decimals rather than one: at one decimal, 145 m and 490 m both collapse to a
+ * single digit and become indistinguishable in a list. Never rounds below 0.01, because
  * "0.00 km away" reads as broken.
  */
 export function splitDistance(metres: number): { value: string; unit: 'km' } {
-  const km = metres / 1000;
+  const km = roadDistance(metres) / 1000;
   return { value: (km < 0.01 ? 0.01 : km).toFixed(2), unit: 'km' };
 }
 
@@ -323,7 +348,13 @@ export function findShop(id: string): Shop | undefined {
 export function shopsForArea(area: Area | null, radiusM?: number | null): Shop[] {
   let pool = area ? SAMPLE_SHOPS.filter((shop) => shop.area === area) : SAMPLE_SHOPS;
   /* A null radius means "no limit", which is what the All chip selects. */
-  if (radiusM != null) pool = pool.filter((shop) => shop.distance_m <= radiusM);
+  /*
+    Filter on the SAME road estimate the list displays. The search is still a plain
+    circle around the rider — cheap, offline, no routing — it is just a circle drawn
+    in travel distance rather than in a straight line, which is what a rider means
+    when they ask for shops within a kilometre.
+  */
+  if (radiusM != null) pool = pool.filter((shop) => roadDistance(shop.distance_m) <= radiusM);
   /*
     Copy before sorting. .sort() rewrites the array it is given, which would quietly
     reorder the shared source array on every render.
@@ -339,20 +370,3 @@ export const RADIUS_OPTIONS: { label: string; value: number | null }[] = [
   { label: 'All', value: null },
 ];
 
-/**
- * A rough travel time, deliberately rough.
- *
- * Straight-line distance x 1.3 for the fact that roads bend, divided by about 20 km/h,
- * which is a realistic Metro Manila motorcycle speed in traffic. It is arithmetic on a
- * number already held on the phone, so it costs nothing and works with no signal.
- *
- * What it is NOT is a traffic-aware ETA. That needs live speed data from millions of
- * phones, which is Waze's business and not something two people can bootstrap. The
- * caller must always render this with a tilde: "~9 min", never "9 min". A travel time
- * that looks precise but ignores traffic is worse than none at all, because it lies to
- * a rider at the moment they are already having a bad day.
- */
-export function roughMinutes(metres: number): number {
-  const km = metres / 1000;
-  return Math.max(1, Math.round((km * 1.3) / 20 * 60));
-}

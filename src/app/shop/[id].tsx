@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ReviewList } from '@/components/ReviewList';
 import { BrandBar } from '@/components/BrandBar';
+import { ChatIcon, NavIcon, PhoneIcon } from '@/components/icons';
 import { findShop, splitDistance } from '@/lib/dev/sample-shops';
 import { useSettings } from '@/lib/settings/store';
 
@@ -55,7 +56,10 @@ export default function ShopScreen() {
       >
         <View style={s.headRow}>
           <View>
-            <Text style={s.distValue}>{value}</Text>
+            <View style={s.distRow}>
+              <Text style={s.distApprox}>≈</Text>
+              <Text style={s.distValue}>{value}</Text>
+            </View>
             <Text style={s.distUnit}>{t.km}</Text>
           </View>
           <View style={s.headText}>
@@ -114,7 +118,7 @@ export default function ShopScreen() {
                   {/* Plain handset here: this button only calls. The unified
                       phone-and-envelope mark belongs on the list row, where one tap
                       offers both. */}
-                  <Text style={s.actGlyphOn}>✆</Text>
+                  <PhoneIcon size={23} color={theme.onFilled} />
                 </View>
                 <Text style={s.actLabel}>{t.call}</Text>
               </Pressable>
@@ -126,7 +130,7 @@ export default function ShopScreen() {
                 accessibilityLabel={t.message}
               >
                 <View style={[s.actCircle, s.actOutline]}>
-                  <Text style={s.actGlyph}>✉</Text>
+                  <ChatIcon size={23} color={theme.ink} />
                 </View>
                 <Text style={s.actLabel}>{t.message}</Text>
               </Pressable>
@@ -142,7 +146,7 @@ export default function ShopScreen() {
             accessibilityLabel={t.directions}
           >
             <View style={[s.actCircle, s.actOutline]}>
-              <Text style={s.actGlyph}>➤</Text>
+              <NavIcon size={23} color={theme.ink} />
             </View>
             <Text style={s.actLabel}>{t.directions}</Text>
           </Pressable>
@@ -257,6 +261,8 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       fontVariant: ['tabular-nums'],
       lineHeight: 40,
     },
+    distRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+    distApprox: { fontSize: 22, fontWeight: '600', color: theme.ink3 },
     distUnit: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: theme.ink3 },
     headText: { flex: 1, gap: 7 },
     name: { fontSize: 23, fontWeight: '700', color: theme.ink, letterSpacing: -0.5, lineHeight: 27 },
@@ -282,8 +288,6 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     },
     actFilled: { backgroundColor: theme.call },
     actOutline: { borderWidth: 1.5, borderColor: theme.line, backgroundColor: theme.surface },
-    actGlyph: { fontSize: 21, lineHeight: 25, color: theme.ink },
-    actGlyphOn: { fontSize: 21, lineHeight: 25, color: theme.onFilled },
     actLabel: { fontSize: 12, fontWeight: '600', color: theme.ink2 },
     noticeBox: {
       backgroundColor: theme.accentFill,

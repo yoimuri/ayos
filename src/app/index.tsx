@@ -22,7 +22,6 @@ import { MockMap } from '@/components/MockMap';
 import {
   RADIUS_OPTIONS,
   SAMPLE_SHOPS,
-  roughMinutes,
   shopsForArea,
   splitDistance,
   type Shop,
@@ -167,31 +166,39 @@ export default function HomeScreen() {
             available={stageH}
             initial="half"
             onPositionChange={setSheetAt}
+            /*
+              The radius chips and the list heading are handed to the sheet rather than
+              nested inside it, because the sheet makes its header the drag target. They
+              still tap and still scroll sideways; what changes is that a downward swipe
+              anywhere across them now moves the sheet, instead of only the thin bar.
+            */
+            header={
+              <>
+                {/* How far to look. Filters the map and the list together. */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.chipRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Text style={s.chipRowLabel}>Within</Text>
+                  {RADIUS_OPTIONS.map((option) => (
+                    <Chip
+                      key={option.label}
+                      label={option.label}
+                      on={settings.radiusM === option.value}
+                      onPress={() => update({ radiusM: option.value })}
+                    />
+                  ))}
+                </ScrollView>
+
+                <View style={s.listHead}>
+                  <Text style={s.listTitle}>{t.nearestToYou}</Text>
+                  <Text style={s.listSort}>{t.byDistance}</Text>
+                </View>
+              </>
+            }
           >
-            {/* How far to look. Filters the map and the list together. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.chipRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={s.chipRowLabel}>Within</Text>
-              {RADIUS_OPTIONS.map((option) => (
-                <Chip
-                  key={option.label}
-                  label={option.label}
-                  on={settings.radiusM === option.value}
-                  onPress={() => update({ radiusM: option.value })}
-                />
-              ))}
-            </ScrollView>
-
-            <View style={s.listHead}>
-              <Text style={s.listTitle}>{t.nearestToYou}</Text>
-              <Text style={s.listSort}>{t.byDistance}</Text>
-            </View>
-            <Text style={s.etaNote}>Times are rough estimates and do not include traffic.</Text>
-
             <FlatList
               ref={listRef}
               data={shops}
@@ -331,10 +338,16 @@ function ShopRow({ shop }: { shop: Shop }) {
     <Link href={`/shop/${shop.id}`} asChild>
       <Pressable style={s.row} accessibilityRole="button">
         <View style={s.distCol}>
-          <Text style={s.distValue}>{value}</Text>
+          {/*
+            The approximation mark belongs ON the number. This is a road-distance
+            estimate from a detour factor, not a measured route, and a bare figure
+            would read as exact.
+          */}
+          <View style={s.distRow}>
+            <Text style={s.distApprox}>≈</Text>
+            <Text style={s.distValue} numberOfLines={1}>{value}</Text>
+          </View>
           <Text style={s.distUnit}>{t.km}</Text>
-          {/* Always a tilde: the difference between an estimate and a promise. */}
-          <Text style={s.distEta}>~{roughMinutes(shop.distance_m)} min</Text>
         </View>
 
         <View style={s.rowBody}>
@@ -511,15 +524,20 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     listTitle: { fontSize: 17, fontWeight: '700', color: theme.ink },
     listSort: { fontSize: 11, letterSpacing: 1, color: theme.ink3, fontWeight: '600' },
 
-    etaNote: { fontSize: 11.5, color: theme.ink3, paddingHorizontal: 18, paddingBottom: 8 },
     listContent: { paddingBottom: 28 },
     sep: { height: StyleSheet.hairlineWidth, backgroundColor: theme.lineSoft, marginLeft: 18 },
 
     row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingVertical: 13 },
-    distCol: { width: 62 },
-    distValue: { fontSize: 25, fontWeight: '700', color: theme.ink, letterSpacing: -0.8, fontVariant: ['tabular-nums'] },
+    /*
+      Wider than it looks like it needs to be. The detour factor makes every number
+      bigger, and with the All chip a shop can sit 12 km out, so the column has to
+      hold the approximation mark plus five characters without clipping.
+    */
+    distCol: { width: 74 },
+    distRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+    distApprox: { fontSize: 15, fontWeight: '600', color: theme.ink3 },
+    distValue: { fontSize: 23, fontWeight: '700', color: theme.ink, letterSpacing: -0.8, fontVariant: ['tabular-nums'] },
     distUnit: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: theme.ink3 },
-    distEta: { fontSize: 11, fontWeight: '600', color: theme.accent, marginTop: 3 },
 
     rowBody: { flex: 1, gap: 4 },
     shopName: { fontSize: 16, fontWeight: '600', color: theme.ink },

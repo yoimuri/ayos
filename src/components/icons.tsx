@@ -1,73 +1,122 @@
-import { Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
 
 /**
- * Icons drawn from plain Views and text glyphs.
+ * The icon set, drawn from a bundled icon font.
  *
- * WHY NOT AN ICON LIBRARY: `@expo/vector-icons` and `react-native-svg` are both absent,
- * and adding either means a new APK rather than an over-the-air update. These are built
- * from primitives that already exist, so they ship free.
+ * THESE ARE THE SHAPES FROM THE DESIGN CANVAS, not approximations of them. The canvas
+ * draws each icon as an SVG path — a curved telephone handset, a speech bubble, a map
+ * pin, an envelope. React Native cannot render a path without `react-native-svg`, which
+ * carries native code and therefore needs a new APK. An icon FONT reaches the same
+ * shapes through a mechanism the build already has.
  *
- * Replace this file with a real icon set in the same build that adds MapLibre. Nothing
- * outside it needs to change.
+ * WHERE THE GLYPHS COME FROM. `assets/fonts/AyosIcons.ttf` is Material Icons, subset to
+ * the five glyphs this app uses. The full family is 348 KB; subset it is 1.6 KB. That
+ * matters because the file rides along on every over-the-air update, so its size is a
+ * recurring cost rather than a one-off — the same reasoning that took the wordmark from
+ * about 200 KB to 14. Generated with fonttools, exactly as the wordmark was.
+ *
+ * TO ADD A GLYPH you must re-subset the font; a codepoint that is not in the file
+ * renders as a blank box. The source family and the subset command are in
+ * docs/DECISIONS.md.
+ *
+ * THIS IS NOT THE SAME THING AS TYPING ✆ OR ✉, and the distinction is the whole point.
+ * Those resolve against whatever font the handset happens to ship, which is why ✆ arrived
+ * ringed in a circle on the test device and ✉ arrived with a cross through it. This font
+ * is bundled with the app, so every device renders the identical shape. Determinism is
+ * what was missing, not drawing.
  */
+
+/** Codepoints present in AyosIcons.ttf. Anything else renders as a blank box. */
+const GLYPH = {
+  /** Curved telephone handset, filled. The canvas uses this shape for Call. */
+  call: '',
+  /** Speech bubble, outlined. The canvas uses this shape for Message. */
+  chat: '',
+  /** Map pin with a hole. The canvas uses this shape for Directions. */
+  pin: '',
+  /** Envelope, outlined, with a V flap. */
+  mail: '',
+  /** Gear. */
+  gear: '',
+} as const;
 
 /**
- * A gear. A ring with eight teeth rotated around it.
+ * One glyph, sized and coloured.
  *
- * Drawn rather than typed: the ⚙ character renders as a colour emoji on many Android
- * builds, which cannot be tinted to match the theme and looks foreign next to the rest
- * of the interface.
+ * `includeFontPadding` is an Android-only property and must be switched off here: Android
+ * reserves extra vertical room above and below a line for ascenders and descenders, which
+ * on a square icon glyph shows up as the icon sitting slightly high inside its box.
  */
-export function GearIcon({ size = 24, color }: { size?: number; color: string }) {
-  const ring = size * 0.56;
-  const toothW = size * 0.13;
-  const toothH = size * 0.2;
-
+function Glyph({
+  char,
+  size,
+  color,
+  style,
+}: {
+  char: string;
+  size: number;
+  color: string;
+  style?: TextStyle;
+}) {
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {Array.from({ length: 8 }, (_, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            width: toothW,
-            height: size * 0.92,
-            transform: [{ rotate: `${i * 22.5}deg` }],
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <View style={{ width: toothW, height: toothH, backgroundColor: color, borderRadius: 1 }} />
-          <View style={{ width: toothW, height: toothH, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-
-      {/* The ring sits on top of the teeth, hiding their inner ends. */}
-      <View
-        style={{
-          width: ring,
-          height: ring,
-          borderRadius: ring / 2,
-          borderWidth: size * 0.11,
-          borderColor: color,
-        }}
-      />
-    </View>
+    <Text
+      allowFontScaling={false}
+      style={[
+        {
+          fontFamily: 'AyosIcons',
+          fontSize: size,
+          lineHeight: size,
+          color,
+          ...Platform.select({ android: { includeFontPadding: false } }),
+        },
+        style,
+      ]}
+    >
+      {char}
+    </Text>
   );
 }
 
+export function GearIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.gear} size={size} color={color} />;
+}
+
+export function PhoneIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.call} size={size} color={color} />;
+}
+
+export function MailIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.mail} size={size} color={color} />;
+}
+
+export function ChatIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.chat} size={size} color={color} />;
+}
+
 /**
- * Contact: a handset with an envelope tucked behind its upper right.
+ * A map pin. The canvas uses a pin for Directions, not an arrow.
  *
- * ONE MARK, not two icons. The earlier version set a handset and an envelope apart with
- * a slash between them, which read as two separate buttons crammed into one circle. The
- * convention everywhere else — and in every reference for this — is that the two shapes
- * OVERLAP into a single silhouette, so the eye reads "contact" rather than "call, or,
- * message".
+ * The distinction is worth keeping: an arrow points, a pin marks a place. This button
+ * hands the rider off to their map app to find somewhere, so a pin is the honest shape.
+ */
+export function NavIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.pin} size={size} color={color} />;
+}
+
+/**
+ * Contact: a handset with an envelope tucked over its upper right.
  *
- * `bg` is the colour behind the icon. The envelope is ringed in it so the overlap stays
- * legible: without that ring the envelope's outline merges into the handset beneath it
- * and the whole thing turns to mush at 20px.
+ * ONE MARK, not two icons. This is the canvas construction, proportion for proportion:
+ * the handset carries the weight from the lower left, and the envelope sits over its
+ * upper right on a small block of the background colour, so the two outlines never merge
+ * into mush at 26px.
+ *
+ * IT ONLY WORKS BECAUSE THE HANDSET IS A THIN CURVE. An earlier attempt drew the phone as
+ * a solid rounded rectangle, and the background block then covered its whole right side
+ * and left a bracket behind. The overlap is not the fragile part — a solid shape
+ * underneath it is.
+ *
+ * `bg` is the colour behind the icon, which the block is painted in.
  */
 export function ContactIcon({
   size = 40,
@@ -78,83 +127,32 @@ export function ContactIcon({
   color: string;
   bg: string;
 }) {
-  const handset = size * 0.66;
-
-  const envW = size * 0.52;
-  const envH = envW * 0.7;
-  const ring = Math.max(1.5, size * 0.05);
-  const border = Math.max(1.2, size * 0.045);
-
-  /* Flap: two bars from the top corners meeting in the middle. */
-  const half = envW / 2 - border;
-  const drop = envH * 0.42;
-  const flapLen = Math.sqrt(half * half + drop * drop);
-  const flapAngle = (Math.atan2(drop, half) * 180) / Math.PI;
-
   return (
     <View style={{ width: size, height: size }}>
-      {/* Handset, lower left, carrying most of the mark's weight. */}
-      <Text
-        style={{
-          position: 'absolute',
-          left: -size * 0.04,
-          bottom: -size * 0.06,
-          fontSize: handset,
-          lineHeight: handset * 1.05,
-          color,
-        }}
-      >
-        ✆
-      </Text>
-
-      {/* Envelope, upper right, ringed in the background so the overlap reads. */}
+      <Glyph
+        char={GLYPH.call}
+        size={size * 0.82}
+        color={color}
+        style={{ position: 'absolute', left: 0, bottom: 0 }}
+      />
       <View
         style={{
           position: 'absolute',
           right: -size * 0.02,
           top: -size * 0.02,
-          width: envW + ring * 2,
-          height: envH + ring * 2,
-          borderRadius: size * 0.06,
+          paddingHorizontal: size * 0.04,
+          paddingVertical: size * 0.03,
+          borderRadius: size * 0.1,
           backgroundColor: bg,
-          alignItems: 'center',
-          justifyContent: 'center',
         }}
       >
-        <View
-          style={{
-            width: envW,
-            height: envH,
-            borderWidth: border,
-            borderColor: color,
-            borderRadius: size * 0.04,
-            overflow: 'hidden',
-          }}
-        >
-          <View
-            style={{
-              position: 'absolute',
-              left: border,
-              top: border * 0.4,
-              width: flapLen,
-              height: border,
-              backgroundColor: color,
-              transform: [{ rotate: `${flapAngle}deg` }],
-            }}
-          />
-          <View
-            style={{
-              position: 'absolute',
-              right: border,
-              top: border * 0.4,
-              width: flapLen,
-              height: border,
-              backgroundColor: color,
-              transform: [{ rotate: `${-flapAngle}deg` }],
-            }}
-          />
-        </View>
+        <Glyph char={GLYPH.mail} size={size * 0.5} color={color} />
       </View>
     </View>
   );
 }
+
+/* Kept so a caller can align a glyph optically without reaching for magic numbers. */
+export const iconStyles = StyleSheet.create({
+  centred: { textAlign: 'center' },
+});

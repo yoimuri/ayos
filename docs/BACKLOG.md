@@ -56,7 +56,8 @@ Numbering matches the design canvas Record page.
 | P6 | Filter by motorcycle type | High | **Joint.** Needs every shop to record what it services |
 | P7 | Landmark line on each shop | **Low** | Co-founder already knows it on the visit |
 | P8 | Address in the list row | None | Data already collected, pure layout |
-| P10 | Road-distance ETA via OSRM or Valhalla | High | Clint. Server-side breaks offline; on-device is serious work |
+| P10 | Real road distance via OSRM or Valhalla | High | Clint. Server-side breaks offline; on-device is serious work. **Partly answered 12 Sep** by the 1.3 detour factor — this is the measured version that replaces the assumed one, and calibrates it |
+| P13 | Move the sheet drag onto the UI thread | Medium | **Ships over the air.** gesture-handler 2.32 and reanimated 4.5.1 are both compiled in already. PanResponder can only scrub from JavaScript, which is a ceiling on how smooth the drag can be. Needs a `GestureHandlerRootView` at the root |
 | P11 | Live traffic, flood and accident reports | **Not viable** | Needs users at Waze scale, or a rented per-request feed |
 | ~~P9~~ | ~~Street View~~ | — | **Rejected 12 Sep.** Breaks three locked rules |
 
@@ -89,8 +90,11 @@ together, not separately.
 |---|---|
 | **`runtimeVersion` never changes** | Both builds are `1.0.0` under the `appVersion` policy, so an update meant for new native code would still be offered to an older APK and could crash it. Either bump `version` on every native change, or switch the policy to `fingerprint`, which computes the fence from the native code itself instead of trusting memory |
 | **Navigation-bar inset unconfirmed** | Three layout fixes have not resolved the overlap. Settings → Build info now prints the real numbers. If `bottom` reads 0 the cause is native config and no layout change will fix it; if it reads ~48 the layout is wrong. **Still unanswered** |
+| **The brand band is a fixed fifth of the screen** | It never collapses, so the map and the list divide what is left. Its shop-count line already truncates, which means it is not earning its row. Collapsing it when the sheet is raised is the next lever on the cramped-list problem |
+| **OxShop.dc.html disagrees with OxHome.dc.html on units** | The shop artboard shows `320 METRES`; the home artboard shows `0.32 KM`, which is what the code does. One of the two artboards is stale and the canvas needs a decision, not a guess |
 | **README has no Supabase setup** | The bus-factor rule needs a stranger to run from a clean checkout. The part they cannot guess is the database, which does not exist yet |
 | **Offline detection is a probe, not the OS** | Up to 15 seconds to notice a change, and a small request every 15s while open. Replaced by N4 |
+| **`DETOUR_FACTOR` is assumed, never measured** | 1.3 is the middle of the published 1.2-1.4 range for dense urban grids, not a figure taken from Metro Manila roads. It shifts both the displayed distance and which shops pass a radius chip, so if it is wrong, it is wrong in both places at once. Calibrate against real routed distances when P10 lands |
 | **Rating stores nothing** | Form, validation and confirmation are real. Storage, the confirmation email and the three rate limits are server-side and arrive at step 9 |
 
 ---

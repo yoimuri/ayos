@@ -26,6 +26,12 @@ function RootNavigator() {
   */
   const [fontsLoaded, fontError] = useFonts({
     AyosWordmark: require('../../assets/fonts/AyosWordmark.ttf'),
+    /*
+      Material Icons subset to the five glyphs this app draws, 1.6 KB. Gated by the same
+      splash hold as the wordmark: an icon font that has not arrived yet renders every
+      icon as a blank box, which looks far more broken than a moment of empty screen.
+    */
+    AyosIcons: require('../../assets/fonts/AyosIcons.ttf'),
   });
   const router = useRouter();
   const segments = useSegments();

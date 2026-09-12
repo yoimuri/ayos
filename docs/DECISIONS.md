@@ -216,3 +216,65 @@ Proposed, not settled, but no objection to it.
 **The lesson carried over from the star rating:** the responder is created ONCE in a ref and reads position, snap points and callbacks through refs. The earlier drag bug was not the API but handlers being rebuilt mid-gesture by re-renders. Two further details that matter: only the grab handle claims the gesture, or the list inside could never be scrolled; and a fast flick beats proximity, because someone throwing the sheet down means "show me the map" even if they only moved forty pixels.
 
 **One consequence worth knowing:** the map's visual centre shifts with the sheet position (`centerBias`), so pins and the position dot stay in the part of the map still visible rather than hiding under the list.
+
+---
+
+## 2026-09-12 - The time estimate is gone; distance is a road approximation
+
+**What:** `roughMinutes()` is deleted, along with the `~N min` line on every list row and the "Times are rough estimates" note under the list head. In its place, `roadDistance()` multiplies the straight-line metres by a `DETOUR_FACTOR` of 1.3, and both screens render the result with a leading `≈`.
+**Why:** The co-founder's reading, and it is sharper than what was there: a straight line between two points is not a distance a rider can travel, so the number under-reported every shop. Roads bend. He also called the time estimate bloat, and he is right — it was distance divided by an invented average speed, so it carried the same error plus a second invented number on top, and a minute figure invites a rider to plan around it in a way a distance figure does not.
+**Rejected:** Keeping the ETA with a bigger disclaimer. A disclaimer does not make a wrong number right, and the rider reads the number, not the note. Also rejected: a real routing engine now — that is P10, it is serious work, and the honest interim is an approximation that admits it is one.
+
+**The factor is assumed, not measured.** Circuity — the ratio of road distance to straight-line distance — sits around 1.2 to 1.4 in a dense urban grid. 1.3 is the middle. It is a single named constant so that when P10 lands, calibrating it is one edit against real routed distances rather than a hunt through the screens.
+
+**The filter moved with the display, and this changes what riders see.** `shopsForArea` now filters on `roadDistance(shop.distance_m)`, not the raw straight line. Had only the display changed, a shop at 780 m straight-line would pass the "within 1 km" chip and then render as ≈1.01 km — a visible contradiction that reads as a bug. Filtering the same number keeps the search a plain offline circle (mathematically, a circle of `radius / 1.3` in straight-line terms) while honouring what the co-founder asked for: radius stays the search basis. On the sample data the 1 km chip drops from 13 shops to 10 and the 2 km chip from 20 to 18. That is the correct answer, not a regression — those shops were never within a kilometre of riding.
+
+---
+
+## 2026-09-12 - The sheet was clunky because the target was 23 pixels tall
+
+**What:** `ShopSheet` now takes a `header` prop, and the whole header drags the sheet: the grab bar, the radius chips and the list heading, about 116dp instead of 23. The responder no longer claims on touch-down, only on a move that is more vertical than horizontal.
+**Why:** Only the little bar was draggable. A thumb is wider than that, so most downward swipes landed on the chips or the list and did nothing. That is not rough physics, it is the gesture never being claimed — the same root cause as the star-rating bug, which is exactly why it felt like the same problem.
+**Rejected:** Making the bar merely taller. The rider aims at the controls, not at a hint, so the controls have to be the handle.
+
+**Two rules make a drag area that still contains buttons.** It never claims on START, so a tap reaches the chip underneath. It claims only a vertical-dominant move, so the horizontal chip strip keeps its own scrolling. Both were needed: the first alone swallows taps, the second alone fights the chips.
+
+**Two more faults fixed in the same pass.** A `forceRender` on every settle re-rendered the entire shop list at the moment the spring started, competing with it for the one thread they share — a hitch on every snap, doing no useful work, since nothing in the output depends on which point it landed on. And the drag scrubbed the value from JavaScript while the release spring ran on the native driver, which is a documented way to get a transform that stutters or stops updating. One owner now: `useNativeDriver: false` throughout.
+
+**The ceiling, stated honestly:** PanResponder can only ever scrub from JavaScript. A drag that runs entirely on the UI thread needs gesture-handler and reanimated, which are both already compiled into this APK, so that switch would ship over the air. It is in the backlog rather than done, because the fault this time was the target, not the thread.
+
+---
+
+## 2026-09-12 - Snap points are measured against what fits, not chosen by eye
+
+**What:** `half` moved from 0.42 to 0.30 of the sheet area and `peek` from 0.74 to 0.58.
+**Why:** The sheet's own header costs about 116dp and a shop row about 85dp. At the old peek, what remained below the sheet top was less than the header alone needed, so "a couple of rows visible" showed none at all. At the old half it showed under two. The map being the main screen is right; taking the list down to two rows to pay for it is not, and that is what "the shop list became smaller" was describing.
+**Rejected:** Shrinking the map. The map earns its space. The space actually being wasted is above it — the brand band is a fixed fifth of the screen and its "21 shops saved on this phone · upd…" line is already truncating, so it is not earning its row. Collapsing the band is the next lever and has not been taken yet.
+
+---
+
+## 2026-09-12 - No character ever stands in for an icon
+
+**What:** `✆`, `✉` and `➤` are gone. `PhoneIcon`, `MailIcon` and `NavIcon` are drawn from Views, and `icons.tsx` gained a `bar()` helper that lays a bar between two points.
+**Why:** A glyph renders in whatever font the handset ships. On the test device `✆` arrived ringed in a circle it was never meant to have and `✉` arrived with a cross through it, which reads as "no messages" rather than "message". The file already carried this rule in its own comment, for the gear, and then broke it three times.
+**Rejected:** Nothing — this was a straightforward fault.
+
+**The envelope's X was a rotation-origin bug, not a rendering quirk.** React Native rotates a view about its CENTRE. The flap bars were positioned by their top-left corner and then rotated, which swung one end above the envelope, where it was clipped, and the other past the middle, where it crossed its mirror. Hence an X. `bar()` now positions the MIDPOINT, which is the only way this works.
+
+**Two limits are admitted in the code rather than hidden.** The curved desk handset cannot be built from rectangles; drawn as a shaft with a cup at each end it rendered as a dumbbell, so `PhoneIcon` is a mobile. And the overlapping contact mark had to be dropped: overlap needs the upper shape ringed in the background colour, and that ring is an opaque square that ate the phone. Four sets of proportions were rendered and every one left a bracket. The two shapes now sit clear of each other on a diagonal.
+
+**Every shape was rendered to an image and looked at before shipping.** That is how the dumbbell and the bracket were caught. Geometry that typechecks still draws whatever it draws.
+
+---
+
+## 2026-09-12 - The icon set is the canvas set, reached through a subset font
+
+**What:** `assets/fonts/AyosIcons.ttf` — Material Icons subset to five glyphs, 1.6 KB. `icons.tsx` now renders those glyphs. Call is a curved handset, Message a speech bubble, Directions a map pin, and the contact mark is a handset with an envelope over its upper right.
+**Why:** The design canvas (artifact `bb645098`, artboards `OxShop.dc.html` and `OxHome.dc.html`) draws every icon as an SVG path. What shipped was `✆`, `✉` and `➤` — a telephone-location sign, an envelope and an arrowhead, none of which are the designed shapes, and all three resolved against whatever font the handset ships. The arrow was not even the right metaphor: the canvas uses a PIN for Directions, because an arrow points and a pin marks a place.
+**Rejected:** `react-native-svg`, which would give path-for-path parity but carries native code and therefore needs a new APK. Also rejected: the full `@expo/vector-icons` package — it is pure JavaScript and would ship over the air, but it carries 19 font families and MaterialIcons alone is 348 KB, and the file rides along on every update.
+
+**348 KB to 1.6 KB.** Subset with fonttools to exactly the five codepoints in use, the same treatment the wordmark got for the same reason: an asset that ships with every update is a recurring cost, not a one-off. Adding a sixth icon means re-subsetting — a codepoint that is not in the file renders as a blank box.
+
+**A bundled icon font is not the thing that was banned.** The rule against typed characters was about glyphs resolving against the HANDSET's font, which is why `✆` arrived ringed in a circle and `✉` arrived with a cross through it. This font ships inside the app, so every device draws the identical shape. What was missing was determinism, not drawing.
+
+**Why hand-drawing could never have got there.** Four attempts were rendered and looked at. The handset is a tapered curve and came out a dumbbell. The contact mark needs the envelope to sit on a block of the background colour so the two outlines stay separate, and that block is opaque: over a thin curved handset it covers empty space, but over the solid rounded rectangle that was standing in for a phone it covered the whole right side and left a bracket. The overlap was never the fragile part. A solid shape underneath it was.
