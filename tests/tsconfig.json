@@ -1,0 +1,11 @@
+{
+  "//": "The tests run under Node's own test runner (npm test), not in the app. Node needs the .ts extension on imports and the app's config forbids it, so the tests are type-checked separately: npx tsc -p tests",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"],
+  "exclude": []
+}
