@@ -1,16 +1,15 @@
-import { Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { Platform, Text, View, type TextStyle } from 'react-native';
 
 /**
  * The icon set, drawn from a bundled icon font.
  *
- * THESE ARE THE SHAPES FROM THE DESIGN CANVAS, not approximations of them. The canvas
- * draws each icon as an SVG path — a curved telephone handset, a speech bubble, a map
- * pin, an envelope. React Native cannot render a path without `react-native-svg`, which
- * carries native code and therefore needs a new APK. An icon FONT reaches the same
- * shapes through a mechanism the build already has.
+ * WHY A FONT: the designs draw each icon as an SVG path (a curved telephone handset, a
+ * speech bubble, a map pin, an envelope). React Native cannot render a path without
+ * `react-native-svg`, which carries native code and therefore needs a new APK. An icon
+ * FONT reaches the same shapes through a mechanism the build already has.
  *
  * WHERE THE GLYPHS COME FROM. `assets/fonts/AyosIcons.ttf` is Material Icons, subset to
- * the thirteen glyphs this app uses. The full family is 348 KB; subset it is about 2 KB. That
+ * the eleven glyphs this app uses. The full family is 348 KB; subset it is about 2 KB. That
  * matters because the file rides along on every over-the-air update, so its size is a
  * recurring cost rather than a one-off — the same reasoning that took the wordmark from
  * about 200 KB to 14. Generated with fonttools, exactly as the wordmark was.
@@ -21,7 +20,7 @@ import { Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
  * Command (add the new code point to the list):
  *
  *   python -m fontTools.subset MaterialIcons-Regular.ttf --layout-features="" --no-hinting
- *     --unicodes="U+E0B0,U+E0CB,U+E0E1,U+E55C,U+E55F,U+E5CC,U+E88F,U+E8B8,U+E9F9,U+E8FF,U+E5CF,U+E5CE,U+E8B6"
+ *     --unicodes="U+E0B0,U+E0CB,U+E0E1,U+E55C,U+E55F,U+E88F,U+E8B8,U+E8FF,U+E5CF,U+E5CE,U+E8B6"
  *     --output-file=assets/fonts/AyosIcons.ttf
  *
  * THIS IS NOT THE SAME THING AS TYPING ✆ OR ✉, and the distinction is the whole point.
@@ -39,18 +38,16 @@ import { Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
  * search for, or safely edit. Referencing `GLYPH.pin` keeps it greppable.
  */
 export const GLYPH = {
-  /** Curved telephone handset, filled. The canvas uses this shape for Call. */
+  /** Curved telephone handset, filled: Call. */
   call: '',
-  /** Speech bubble, outlined. The canvas uses this shape for Message. */
+  /** Speech bubble, outlined: Message. */
   chat: '',
-  /** Map pin with a hole. The canvas uses this shape for Directions. */
+  /** Map pin with a hole: Directions. */
   pin: '',
   /** Envelope, outlined, with a V flap. */
   mail: '',
   /** Gear. */
   gear: '',
-  /** Right chevron: this control leads somewhere. */
-  chevron: '',
   /** Crosshair with a centre dot: "put me back in the middle". */
   crosshair: '',
   /** Outlined i in a circle: "there is small print behind this". */
@@ -63,8 +60,6 @@ export const GLYPH = {
   expandLess: '\uE5CE',
   /** Magnifier: search. */
   search: '\uE8B6',
-  /** A motorcycle in side profile. Marks the rider on the map. */
-  moto: '',
 } as const;
 
 /**
@@ -114,11 +109,6 @@ export function GearIcon({ size = 24, color }: { size?: number; color: string })
   return <Glyph char={GLYPH.gear} size={size} color={color} />;
 }
 
-/** The rider, on a map made for riders. */
-export function MotoIcon({ size = 24, color }: { size?: number; color: string }) {
-  return <Glyph char={GLYPH.moto} size={size} color={color} />;
-}
-
 /** Small print behind a small button. */
 export function InfoIcon({ size = 24, color }: { size?: number; color: string }) {
   return <Glyph char={GLYPH.info} size={size} color={color} />;
@@ -143,17 +133,8 @@ export function CrosshairIcon({ size = 24, color }: { size?: number; color: stri
   return <Glyph char={GLYPH.crosshair} size={size} color={color} />;
 }
 
-/** Points into a screen. Never an action on its own, always "there is more this way". */
-export function ChevronIcon({ size = 24, color }: { size?: number; color: string }) {
-  return <Glyph char={GLYPH.chevron} size={size} color={color} />;
-}
-
 export function PhoneIcon({ size = 24, color }: { size?: number; color: string }) {
   return <Glyph char={GLYPH.call} size={size} color={color} />;
-}
-
-export function MailIcon({ size = 24, color }: { size?: number; color: string }) {
-  return <Glyph char={GLYPH.mail} size={size} color={color} />;
 }
 
 export function ChatIcon({ size = 24, color }: { size?: number; color: string }) {
@@ -161,7 +142,7 @@ export function ChatIcon({ size = 24, color }: { size?: number; color: string })
 }
 
 /**
- * A map pin. The canvas uses a pin for Directions, not an arrow.
+ * A map pin for Directions, not an arrow.
  *
  * The distinction is worth keeping: an arrow points, a pin marks a place. This button
  * hands the rider off to their map app to find somewhere, so a pin is the honest shape.
@@ -218,8 +199,3 @@ export function ContactIcon({
     </View>
   );
 }
-
-/* Kept so a caller can align a glyph optically without reaching for magic numbers. */
-export const iconStyles = StyleSheet.create({
-  centred: { textAlign: 'center' },
-});

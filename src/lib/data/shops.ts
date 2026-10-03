@@ -143,8 +143,6 @@ function widen(raw: RawShop, from: [number, number], now: Date): Shop {
   };
 }
 
-export const SHOP_COUNT = ROWS.length;
-
 /**
  * One shop by id.
  *

@@ -21,9 +21,6 @@ export type Strings = {
   findingLocation: string;
   help: string;
   noSignalUsing: (date: string) => string;
-  radiusWidened: (from: string, to: string) => string;
-  radiusPill: (radius: string, count: number) => string;
-  noMapOffline: string;
 
   // Status
   open: string;
@@ -116,7 +113,6 @@ export type Strings = {
   qServices: string;
   qServicesHint: string;
   surveyWhy: string;
-  surveyOptional: string;
   surveyThanksTitle: string;
   surveyThanksBody: string;
   answerNow: string;
@@ -126,7 +122,6 @@ export type Strings = {
   showSearch: string;
   hideSearch: string;
   tourDrag: string;
-  shopList: string;
 
   // Tutorial
   tourList: string;
@@ -151,10 +146,6 @@ const en: Strings = {
   findingLocation: 'Finding your location…',
   help: 'How to use Ayos',
   noSignalUsing: (date) => `No signal. Showing the shop list from ${date}.`,
-  radiusWidened: (from, to) =>
-    `Only a few shops within ${from}, so we widened the search to ${to}.`,
-  radiusPill: (radius, count) => `${radius} · ${count} shops`,
-  noMapOffline: 'No map without a signal. Every shop, distance and number is still here.',
 
   open: 'Open',
   closed: 'Closed',
@@ -242,7 +233,6 @@ const en: Strings = {
   qServicesHint: 'Pick all that apply.',
   surveyWhy:
     'This helps us find the right shops to add. Your answers stay on this phone; nothing is sent anywhere.',
-  surveyOptional: 'Optional. Tap Continue to skip.',
   surveyThanksTitle: 'Thank you for downloading Ayos!',
   surveyThanksBody:
     'So we can help you better in the future, could you answer 4 quick questions about your motorcycle? It takes less than a minute, and your answers stay on this phone.',
@@ -253,7 +243,6 @@ const en: Strings = {
   showSearch: 'Show search',
   hideSearch: 'Hide search',
   tourDrag: 'Drag this bar down to see more of the map, or up to see more of the list.',
-  shopList: 'Shop list',
 
   tourList: 'These are the shops nearest to you. Tap one to see it.',
   tourActions: 'From here you can call the shop, text them, or get directions.',
@@ -277,11 +266,6 @@ const tl: Strings = {
   findingLocation: 'Hinahanap ang location mo…',
   help: 'Paano gamitin ang Ayos',
   noSignalUsing: (date) => `Walang signal. Ipinapakita ang listahan noong ${date}.`,
-  radiusWidened: (from, to) =>
-    `Kulang ang nakita sa ${from}, kaya pinalawak namin hanggang ${to}.`,
-  radiusPill: (radius, count) => `${radius} · ${count} na shop`,
-  noMapOffline:
-    'Walang mapa habang walang signal. Nandito pa rin lahat ng shop, layo at numero.',
 
   open: 'Bukas',
   closed: 'Sarado',
@@ -371,7 +355,6 @@ const tl: Strings = {
   qServicesHint: 'Piliin lahat ng tugma.',
   surveyWhy:
     'Tumutulong ito para malaman namin kung anong mga shop ang idadagdag. Naka-save lang sa phone mo ang sagot mo; walang ipinapadala kahit saan.',
-  surveyOptional: 'Hindi required. Pindutin ang Tuloy para laktawan.',
   surveyThanksTitle: 'Salamat sa pag-download ng Ayos!',
   surveyThanksBody:
     'Para mas matulungan ka namin sa susunod, puwede mo bang sagutin ang 4 na mabilis na tanong tungkol sa motor mo? Wala pang isang minuto, at naka-save lang sa phone mo ang sagot mo.',
@@ -382,7 +365,6 @@ const tl: Strings = {
   showSearch: 'Ipakita ang search',
   hideSearch: 'Itago ang search',
   tourDrag: 'Hilahin pababa ang bar na ito para makita ang mapa, o pataas para sa listahan.',
-  shopList: 'Listahan ng shop',
 
   tourList: "Ito ang mga shop na pinakamalapit sa'yo. Pindutin ang isa para makita.",
   tourActions: 'Dito ka puwedeng tumawag, mag-text, o humanap ng daan papunta sa shop.',

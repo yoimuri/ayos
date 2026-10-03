@@ -26,6 +26,7 @@ import {
   FindingBanner,
   LocationBanner,
   LocationCard,
+  PreciseBanner,
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
 import { RealMap } from '@/components/RealMap';
@@ -658,8 +659,16 @@ export default function HomeScreen() {
           that has settled or timed out, the rough-fix banner if the result is still poor.
           Never both at once.
         */}
-        {gate.finding && <FindingBanner />}
-        {!gate.finding &&
+        {/*
+          Approximate location beats every other notice: with it on, nothing about where
+          the rider is can be trusted, and the fix is one switch.
+        */}
+        {gate.status === 'ready' && gate.precise === false && (
+          <PreciseBanner onPress={gate.openSettings} />
+        )}
+        {gate.precise !== false && gate.finding && <FindingBanner />}
+        {gate.precise !== false &&
+          !gate.finding &&
           gate.status === 'ready' &&
           gate.accuracyM !== null &&
           gate.accuracyM > 50 && (
@@ -1113,17 +1122,6 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
 
 
-    /* Temporary. Deleted once OTA delivery is confirmed. */
-    diag: {
-      paddingHorizontal: 18,
-      paddingVertical: 8,
-      backgroundColor: theme.accentFill,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.accent,
-      gap: 2,
-    },
-    diagText: { fontSize: 11, fontWeight: '700', color: theme.accent, letterSpacing: 0.3 },
-
     /* Small on purpose: the app bar has to hold more controls later. */
     cityPill: {
       maxWidth: 170,
@@ -1285,9 +1283,6 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     callBtn: { width: 44, height: 44, borderRadius: 11, backgroundColor: theme.call, alignItems: 'center', justifyContent: 'center' },
     callBtnEmpty: { width: 44, height: 44 },
-    openBtn: { paddingLeft: 2, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
-    /* The shop the map is currently showing, so a tap on the row is visibly acknowledged. */
-    rowSelected: { backgroundColor: theme.accentFill },
     /* Visible feedback the moment a finger lands, so a tap never feels ignored. */
     rowPressed: { backgroundColor: theme.lineSoft },
     pressed: { opacity: 0.6 },

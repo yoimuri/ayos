@@ -206,6 +206,19 @@ export default function SettingsScreen() {
             <Text style={s.buildLine}>
               Fixes accepted {gate.debug.accepted} · rejected as worse {gate.debug.rejected}
             </Text>
+            {/*
+              COMPARE WITH GOOGLE MAPS. If these numbers match Google's within about 10 m but
+              the dots sit in different places, the two MAPS draw the street differently;
+              if the numbers differ, the position does.
+            */}
+            <Text style={s.buildLine} selectable>
+              Drawn {gate.position ? `${gate.position[1].toFixed(6)}, ${gate.position[0].toFixed(6)}` : '—'}
+            </Text>
+            <Text style={s.buildLine} selectable>
+              Phone {gate.debug.raw ? `${gate.debug.raw[1].toFixed(6)}, ${gate.debug.raw[0].toFixed(6)}` : '—'}
+              {' · '}speed {gate.debug.speed === null ? '—' : `${gate.debug.speed.toFixed(1)} m/s`}
+              {' · '}precise {gate.precise === null ? '—' : gate.precise ? 'yes' : 'NO'}
+            </Text>
           </View>
         </Group>
       </ScrollView>

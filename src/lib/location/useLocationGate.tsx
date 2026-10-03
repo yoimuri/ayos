@@ -51,6 +51,13 @@ export type LocationDebug = {
   rejected: number;
   /** Fixes accepted since the watch started. */
   accepted: number;
+  /**
+   * The last reading exactly as the phone gave it, before any filtering, as
+   * [longitude, latitude]. Shown in Settings so it can be compared with Google Maps.
+   */
+  raw: [number, number] | null;
+  /** Speed the phone reported with that reading, metres per second. */
+  speed: number | null;
 };
 
 export type LocationGate = {
@@ -59,6 +66,12 @@ export type LocationGate = {
   position: [number, number] | null;
   /** True when `position` is a remembered fix rather than a current one. */
   stale: boolean;
+  /**
+   * False when the rider granted only APPROXIMATE location (Android 12+). Android then
+   * gives positions good to only about 3 km², so every distance is unreliable and the app
+   * says so. Null until known.
+   */
+  precise: boolean | null;
   /**
    * True from the moment the live watch starts until a reading is within 30 m, or 15 s
    * have passed (see settle.ts). The home screen shows "finding your location" and the
@@ -130,7 +143,10 @@ function useLocationGateState(): LocationGate {
     networkAvailable: null,
     rejected: 0,
     accepted: 0,
+    raw: null,
+    speed: null,
   });
+  const [precise, setPrecise] = useState<boolean | null>(null);
   /** The fix currently on screen, so a worse one can be refused. */
   const held = useRef<Fix | null>(null);
   const counts = useRef({ accepted: 0, rejected: 0 });
@@ -230,6 +246,7 @@ function useLocationGateState(): LocationGate {
         },
         (p) => {
           if (!mounted.current) return;
+          setDebug((d) => ({ ...d, raw: [p.coords.longitude, p.coords.latitude], speed: p.coords.speed ?? null }));
 
           /*
             DIRECTION OF TRAVEL, taken from EVERY fix, including ones the accuracy gate
@@ -270,9 +287,15 @@ function useLocationGateState(): LocationGate {
             lat: p.coords.latitude,
             accuracy: p.coords.accuracy ?? null,
             timestamp: p.timestamp,
+            speed: p.coords.speed,
           });
           if (fixed) setPosition([fixed.lng, fixed.lat]);
-          setAccuracyM(fixed ? fixed.accuracy : (p.coords.accuracy ?? null));
+          /*
+            The PHONE's figure, not the filter's. Averaging makes the filter's own number
+            look far better than the readings deserve when the error is the slow, shared
+            kind indoors, and then the "rough fix" warning never appeared.
+          */
+          setAccuracyM(p.coords.accuracy ?? null);
           setStale(false);
           if (isGoodFix(p.coords.accuracy)) setSettled(true);
           setDebug((d) => ({
@@ -341,6 +364,8 @@ function useLocationGateState(): LocationGate {
 
     if (perm?.granted) {
       setStatus('ready');
+      /* 'coarse' means the rider chose "Approximate" in Android's permission dialog. */
+      setPrecise(perm.android ? perm.android.accuracy === 'fine' : null);
       /*
         Which providers the phone is actually willing to use. `gpsAvailable: false` is the
         single most useful thing to know when a position is wrong: it means no amount of
@@ -389,18 +414,25 @@ function useLocationGateState(): LocationGate {
     try {
       const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       if (!mounted.current) return;
-      /* Deliberately bypasses the better-fix gate: the rider asked for THIS reading. */
-      held.current = { accuracy: p.coords.accuracy ?? null, timestamp: p.timestamp };
+      /*
+        SAME SAFEGUARDS AS EVERY OTHER READING. This used to skip the gate, wipe the
+        filter and draw whatever came back, so pressing recentre during a bad patch could
+        drop the dot on a +-60 m WiFi guess. A fresh reading that is genuinely better
+        still wins through the same rules.
+      */
+      const fix: Fix = { accuracy: p.coords.accuracy ?? null, timestamp: p.timestamp };
+      if (!isBetterFix(fix, held.current, Date.now())) return;
+      held.current = fix;
       counts.current.accepted += 1;
-      /* The rider asked for THIS reading, so the averaging history is discarded. */
-      posFilter.current.reset();
-      posFilter.current.push({
+      const fixed = posFilter.current.push({
         lng: p.coords.longitude,
         lat: p.coords.latitude,
         accuracy: p.coords.accuracy ?? null,
         timestamp: p.timestamp,
+        speed: p.coords.speed,
       });
-      setPosition([p.coords.longitude, p.coords.latitude]);
+      if (!fixed) return;
+      setPosition([fixed.lng, fixed.lat]);
       setAccuracyM(p.coords.accuracy ?? null);
       setStale(false);
       if (isGoodFix(p.coords.accuracy)) setSettled(true);
@@ -461,6 +493,7 @@ function useLocationGateState(): LocationGate {
     status,
     position,
     stale,
+    precise,
     finding: status === 'ready' && !settled,
     accuracyM,
     debug,

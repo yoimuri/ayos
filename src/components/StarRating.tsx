@@ -109,7 +109,7 @@ export function StarRating({
     The responder above is frozen at first render, so it cannot close over `applyAt`
     directly. It calls through this ref, which always points at the current function.
   */
-  const applyRef = useRef((pageX: number) => {});
+  const applyRef = useRef<(pageX: number) => void>(() => {});
   applyRef.current = (pageX: number) => {
     const w = width.current;
     if (w <= 0) return;

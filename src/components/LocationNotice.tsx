@@ -153,6 +153,31 @@ export function FindingBanner() {
   );
 }
 
+/**
+ * Shown when the rider allowed only APPROXIMATE location. Android then reports a spot
+ * anywhere within about 3 km², which makes every distance in the app wrong. The fix is
+ * one switch in this app's settings ("Use precise location"), so the banner opens them.
+ */
+export function PreciseBanner({ onPress }: { onPress: () => void }) {
+  const { theme } = useSettings();
+  const s = styles(theme);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={s.banner}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel="Approximate location is on, so distances can be kilometres off. Tap to turn on precise location."
+    >
+      <View style={s.dot} />
+      <Text style={s.bannerText} numberOfLines={1}>
+        Approximate location · distances can be km off
+      </Text>
+      <Text style={s.bannerCta}>Fix</Text>
+    </Pressable>
+  );
+}
+
 /** The quiet reminder that stays behind once the card is dismissed. */
 export function LocationBanner({
   status,
