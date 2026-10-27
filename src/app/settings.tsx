@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { BrandBar } from '@/components/BrandBar';
 import { ExpandIcon } from '@/components/icons';
 import * as Updates from 'expo-updates';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLocationGate } from '@/lib/location/useLocationGate';
@@ -156,6 +156,28 @@ export default function SettingsScreen() {
         </Group>
 
         {/*
+          FIELD SURVEY MODE: a developer feature for the people surveying shops in person,
+          removed before launch. With it on, every shop gets an "Update shop info" button,
+          and the two rows below appear. The ⓘ explains it in one line.
+        */}
+        <Group title={t.fieldMode} info={() => Alert.alert(t.fieldMode, t.fieldModeInfo)}>
+          <Option label="On" selected={settings.fieldMode} onPress={() => update({ fieldMode: true })} />
+          <Option label="Off" selected={!settings.fieldMode} onPress={() => update({ fieldMode: false })} />
+          {settings.fieldMode && (
+            <>
+              <Pressable onPress={() => router.push('/fieldwork/shop')} style={s.option} accessibilityRole="button">
+                <Text style={s.optionLabel}>Add a shop</Text>
+                <Text style={s.chevron}>›</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/fieldwork')} style={s.option} accessibilityRole="button">
+                <Text style={s.optionLabel}>Survey log, export and backup</Text>
+                <Text style={s.chevron}>›</Text>
+              </Pressable>
+            </>
+          )}
+        </Group>
+
+        {/*
           The OTA diagnostic lives HERE now, not on the home screen.
 
           It is a developer readout, and a permanent amber strip across the main screen
@@ -265,10 +287,13 @@ export default function SettingsScreen() {
 function Group({
   title,
   summary,
+  info,
   children,
 }: {
   title: string;
   summary?: string;
+  /** Optional ⓘ beside the title, for a group that needs a sentence of explanation. */
+  info?: () => void;
   children: React.ReactNode;
 }) {
   const { theme } = useSettings();
@@ -276,7 +301,14 @@ function Group({
   const [open, setOpen] = useState(false);
   return (
     <View style={s.group}>
-      <Text style={s.groupTitle}>{title}</Text>
+      <View style={s.groupTitleRow}>
+        <Text style={s.groupTitle}>{title}</Text>
+        {info && (
+          <Pressable onPress={info} hitSlop={12} accessibilityRole="button" accessibilityLabel={`About ${title}`}>
+            <Text style={s.infoGlyph}>ⓘ</Text>
+          </Pressable>
+        )}
+      </View>
       <View style={s.groupBody}>
         {summary !== undefined && (
           <Pressable
@@ -333,6 +365,8 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     body: { padding: 18, gap: 24, paddingBottom: 40 },
     group: { gap: 8 },
+    groupTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    infoGlyph: { fontSize: 18, color: theme.call, fontWeight: '700' },
     groupTitle: {
       fontSize: 12,
       fontWeight: '700',

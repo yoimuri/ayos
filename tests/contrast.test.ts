@@ -52,6 +52,8 @@ for (const [palette, modes] of Object.entries(PALETTES)) {
     for (const ground of [MAP_LAND, MAP_WATER]) {
       assert.ok(contrast(t.accent, ground) >= 3, `pin ${t.accent} on ${ground}`);
       assert.ok(contrast(t.ink, ground) >= 3, `selected pin ${t.ink} on ${ground}`);
+      assert.ok(contrast(t.open, ground) >= 3, `visited pin ${t.open} on ${ground}`);
+      assert.ok(contrast(t.call, ground) >= 3, `survey pin ${t.call} on ${ground}`);
     }
     assert.ok(contrast(t.onFilled, t.accent) >= 4.5, 'cluster count on its circle');
   });

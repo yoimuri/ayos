@@ -5,8 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandBar } from '@/components/BrandBar';
 import { StarRating } from '@/components/StarRating';
-import { useShop } from '@/lib/data/shops';
+import { useAppShop } from '@/lib/data/shops';
 import { useLocationGate } from '@/lib/location/useLocationGate';
+import { isComplete, overall, type RatingParts } from '@/lib/personal/model';
+import { usePersonal } from '@/lib/personal/store';
 import { useSettings } from '@/lib/settings/store';
 
 /**
@@ -23,6 +25,11 @@ import { useSettings } from '@/lib/settings/store';
  *
  * When the backend exists, the submit handler calls a Supabase Edge Function and the
  * rest of this screen stays as it is.
+ *
+ * THREE PARTS, ONE SCORE: Service, Price and Assistance, each 1-5 stars. The shop shows
+ * their average as one overall score; tapping the shop shows the three. Until ratings
+ * are stored on the server, Send also remembers the rating on this phone, so it appears
+ * under My shops -> Rated.
  */
 
 export default function RateScreen() {
@@ -31,9 +38,13 @@ export default function RateScreen() {
   const router = useRouter();
   /* From the surveyed list. This used to look in the invented one, so no real shop could be rated. */
   const gate = useLocationGate();
-  const shop = useShop(String(id), gate.position, settings.area);
+  const shop = useAppShop(String(id), gate.position, settings.area);
+  const personal = usePersonal();
 
-  const [stars, setStars] = useState(0);
+  const [parts, setParts] = useState<Partial<RatingParts>>({});
+  const setPart = (key: keyof RatingParts) => (v: number) => setParts((p) => ({ ...p, [key]: v }));
+  const complete = isComplete(parts);
+  const stars = complete ? overall(parts) : 0;
   /*
     MOCK ATTACHMENTS. Choosing a real photo needs `expo-image-picker`, which is a
     native module: it cannot ship over the air and costs a build. These chips prove
@@ -57,7 +68,7 @@ export default function RateScreen() {
     is the confirmation email itself: a wrong address simply never gets confirmed.
   */
   const emailLooksReal = email.includes('@') && email.split('@')[1]?.includes('.');
-  const canSend = stars > 0 && name.trim().length > 0 && emailLooksReal;
+  const canSend = complete && name.trim().length > 0 && emailLooksReal;
 
   if (sent) {
     return (
@@ -97,12 +108,29 @@ export default function RateScreen() {
         keyboardShouldPersistTaps="handled"
         scrollEnabled={scrollEnabled}
       >
-        <StarRating
-          value={stars}
-          onChange={setStars}
-          onDragStart={() => setScrollEnabled(false)}
-          onDragEnd={() => setScrollEnabled(true)}
-        />
+        {(
+          [
+            ['service', t.partService, t.partServiceHint],
+            ['price', t.partPrice, t.partPriceHint],
+            ['assistance', t.partAssistance, t.partAssistanceHint],
+          ] as [keyof RatingParts, string, string][]
+        ).map(([key, label, hint]) => (
+          <View key={key} style={s.part}>
+            <Text style={s.partLabel}>{label}</Text>
+            <Text style={s.help}>{hint}</Text>
+            <StarRating
+              value={parts[key] ?? 0}
+              onChange={setPart(key)}
+              onDragStart={() => setScrollEnabled(false)}
+              onDragEnd={() => setScrollEnabled(true)}
+            />
+          </View>
+        ))}
+        {complete && (
+          <Text style={s.overall}>
+            {t.overallScore}: {stars.toFixed(1)} ★
+          </Text>
+        )}
 
         <View style={s.field}>
           <Text style={s.label}>Add proof (optional)</Text>
@@ -189,7 +217,10 @@ export default function RateScreen() {
         </View>
 
         <Pressable
-          onPress={() => setSent(true)}
+          onPress={() => {
+            if (complete) personal.rate(shop.id, parts);
+            setSent(true);
+          }}
           disabled={!canSend}
           style={[s.submit, !canSend && s.submitOff]}
           accessibilityRole="button"
@@ -200,8 +231,8 @@ export default function RateScreen() {
 
         {!canSend && (
           <Text style={s.help}>
-            {stars === 0
-              ? 'Pick a star rating to continue.'
+            {!complete
+              ? t.rateAllThree
               : !name.trim()
                 ? 'Add your name to continue.'
                 : 'Add an email address to continue.'}
@@ -250,6 +281,9 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     chipX: { fontSize: 13, color: theme.call },
 
     field: { gap: 7 },
+    part: { gap: 6 },
+    partLabel: { fontSize: 17, fontWeight: '700', color: theme.ink },
+    overall: { fontSize: 18, fontWeight: '700', color: theme.ink, textAlign: 'center' },
     label: { fontSize: 14, fontWeight: '600', color: theme.ink2 },
     input: {
       minHeight: 52,

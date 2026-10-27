@@ -47,6 +47,10 @@ export type Shop = {
    */
   ratingAvg: number | null;
   ratings: Review[];
+  /** Field survey mode: this phone has corrections for the shop (developer feature). */
+  edited?: boolean;
+  /** Field survey mode: a shop the surveyor added that is not on the list yet. */
+  isNew?: boolean;
 };
 
 /** One rider's rating. Always empty until ratings are stored. */

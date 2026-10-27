@@ -7,7 +7,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 
 import { ConnectionBanner } from '@/components/ConnectionBanner';
+import { FieldworkProvider } from '@/lib/fieldwork/store';
 import { LocationProvider } from '@/lib/location/useLocationGate';
+import { PersonalProvider } from '@/lib/personal/store';
 import { SettingsProvider, useSettings } from '@/lib/settings/store';
 
 /**
@@ -103,7 +105,12 @@ export default function RootLayout() {
         three watches and raised more than one permission dialog.
       */}
       <LocationProvider>
-        <RootNavigator />
+        {/* My shops and field survey data, each on this phone, each under its own key. */}
+        <PersonalProvider>
+          <FieldworkProvider>
+            <RootNavigator />
+          </FieldworkProvider>
+        </PersonalProvider>
       </LocationProvider>
     </SettingsProvider>
     </GestureHandlerRootView>

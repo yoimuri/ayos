@@ -6,8 +6,8 @@ working when their phone has no signal.
 Coverage is Metro Manila. The app locates shops, it does not rate their competence.
 
 **Status: in testing.** The map, the shop list and shop details run on a test phone. There is
-no backend yet: the shop list ships inside the app, and ratings are not saved. See
-[Current state](#current-state).
+no backend yet: the shop list ships inside the app, and a rating is kept only on the phone
+that gave it. See [Current state](#current-state).
 
 ---
 
@@ -73,15 +73,19 @@ Nothing extra to install: Node runs the TypeScript tests directly, and Python's 
 src/
   app/                screens. Expo Router treats every file here as a route
     index.tsx         the map, with a panel showing the shop list or one shop
+    my-shops.tsx      the rider's saved, visited and rated shops
+    fieldwork/        field survey mode: correct or add shops, export a spreadsheet
   components/         the map, the panel, shop details, the tutorial
   lib/
     data/             the shop list (shops.json) and how screens read it
+    fieldwork/        survey edits kept as a change log over the original list
+    personal/         saved, visited and own ratings, kept on the phone
     geo/              distance and radius rules
     location/         permission, GPS smoothing, compass and direction of travel
     map/              when the camera follows the rider
     theme/            colour palettes and the contrast check
 scripts/
-  import_shops.py     field spreadsheet -> report -> shops.json
+  import_shops.py     field spreadsheet -> report -> shops.json; merges survey exports
 tests/
 ```
 
@@ -91,6 +95,12 @@ React Native, which is what lets the tests run on plain Node.
 The shop records are collected in the field, shop by shop, and reach the app only through
 `scripts/import_shops.py`. It writes a report of every skipped, flagged or unreadable row
 first, and changes the app's data only when run again with `--apply`.
+
+Field survey exports from the app (one `.xlsx` each) are merged into a copy of the sheet
+with `--survey <file>`. An edit is written only if the cell still holds what the surveyor
+saw, so a cell someone changed since is listed as a conflict instead of overwritten. Every
+written cell is coloured and carries a comment with its old value. The checked copy then
+becomes the sheet and goes through the normal import.
 
 ---
 
@@ -143,10 +153,22 @@ Working on a test phone:
 - About 2,800 shops across all 17 Metro Manila cities, on the phone, usable with no signal
 - English and Taglish, light and dark, an interactive tutorial
 
+Built, not yet checked on the test phone:
+
+- My shops: Save and Visited on every shop, a list of saved, visited and rated shops, and
+  visited shops drawn green on the map
+- Ratings in three parts (service, price, assistance), shown as one overall score with the
+  parts one tap away
+- Field survey mode, for the team collecting shop details in person: correct a shop's
+  details, add a missing shop or fix a wrong one by dragging a pin onto it on the map (the
+  coordinates fill themselves in), keep every change in an editable log with the original
+  always restorable, and export one spreadsheet (new shops, edited shops, every change)
+  plus a backup. It is removed before release
+
 Not built yet:
 
 - A backend and database, so the shop list can be updated without a new app release
-- Saving ratings (the screens exist, nothing is stored), legal pages
+- Saving ratings to a server (today a rating stays on the phone that gave it), legal pages
 - Self-hosted map tiles (it uses OpenFreeMap's public tiles today)
 
 ---

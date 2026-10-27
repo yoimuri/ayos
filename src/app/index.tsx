@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
@@ -19,7 +19,7 @@ import { BrandHeader, Wordmark } from '@/components/BrandBar';
 import { ContactCard } from '@/components/ContactCard';
 import { ShopSheet, sheetTop, type SheetPosition } from '@/components/ShopSheet';
 import { ShopDetailsBody, ShopDetailsHeader } from '@/components/ShopDetails';
-import { ContactIcon, ExpandIcon, GearIcon, NavIcon, SearchIcon } from '@/components/icons';
+import { ContactIcon, ExpandIcon, GearIcon, NavIcon, SavedIcon, SearchIcon } from '@/components/icons';
 import { SurveyPrompt } from '@/components/SurveyPrompt';
 import {
   AccuracyBanner,
@@ -33,7 +33,10 @@ import { RealMap } from '@/components/RealMap';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
 import { useOnline } from '@/lib/net/useOnline';
 import { useLocationGate } from '@/lib/location/useLocationGate';
-import { useShops } from '@/lib/data/shops';
+import { useAppShops } from '@/lib/data/shops';
+import { useExportReminder } from '@/lib/fieldwork/store';
+import { overall } from '@/lib/personal/model';
+import { usePersonal } from '@/lib/personal/store';
 import type { Shop } from '@/lib/data/types';
 import { RADIUS_OPTIONS, shopsForArea, splitDistance } from '@/lib/geo/distance';
 import { AREA_CENTRES, AREA_LABELS, useSettings, type Area } from '@/lib/settings/store';
@@ -198,7 +201,25 @@ export default function HomeScreen() {
     actually are. The draft set carries invented distances; the surveyed set has
     coordinates, so its distances are computed from the current position.
   */
-  const allShops = useShops(gate.position, settings.area);
+  const allShops = useAppShops(gate.position, settings.area);
+  const personal = usePersonal();
+  const exportDue = useExportReminder();
+
+  /*
+    OPENED FROM MY SHOPS: that screen comes back here with `open` set to a shop id and
+    `at` set to the moment of the tap. The shop opens as if its row were tapped, once per
+    request: the handled request is remembered, so a later visit to the map does not
+    open it again, while a new tap (a new `at`) does. Done during render rather than in
+    an effect, so the shop is open in the same frame the map appears.
+  */
+  const { open: openId, at: openAt } = useLocalSearchParams<{ open?: string; at?: string }>();
+  const [handledOpen, setHandledOpen] = useState<string | null>(null);
+  const openRequest = openId ? `${openId}@${openAt ?? ''}` : null;
+  if (openRequest && openRequest !== handledOpen && allShops.length > 0) {
+    setHandledOpen(openRequest);
+    const shop = allShops.find((x) => x.id === openId);
+    if (shop) openShop(shop);
+  }
   /*
     The open shop as the LATEST list describes it. `focus` holds the object from the
     moment it was tapped; its distance and open/closed state go stale as the rider moves.
@@ -483,6 +504,16 @@ export default function HomeScreen() {
           >
             <Text style={s.helpGlyph}>?</Text>
           </Pressable>
+          {/* MY SHOPS: saved, visited and rated, on this phone. */}
+          <Pressable
+            onPress={() => router.push('/my-shops')}
+            style={s.bandIconBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t.myShops}
+          >
+            <SavedIcon on={false} size={20} color={theme.bandInk} />
+          </Pressable>
           <Pressable
             onPress={() => router.push('/settings')}
             style={s.bandIconBtn}
@@ -593,6 +624,7 @@ export default function HomeScreen() {
         <MapBoundary>
             <RealMap
             shops={shops}
+            visited={personal.data.visited}
             focus={focus}
             /* A pin opens the shop in the panel, exactly as its list row does. */
             onPressPin={openFromTap}
@@ -763,7 +795,21 @@ export default function HomeScreen() {
                 the list, never another popup, gone once answered or "Don't ask again".
               */
               ListHeaderComponent={
-                settings.surveyState === 'later' ? (
+                <>
+                {/*
+                  FIELD SURVEY MODE: a daily nudge to export, so a day's survey work is
+                  never only on one phone.
+                */}
+                {settings.fieldMode && exportDue && (
+                  <Pressable
+                    onPress={() => router.push('/fieldwork')}
+                    style={({ pressed }) => [s.reminder, pressed && s.pressed]}
+                    accessibilityRole="button"
+                  >
+                    <Text style={s.reminderText}>Survey work is not exported yet. Tap to export it.</Text>
+                  </Pressable>
+                )}
+                {settings.surveyState === 'later' ? (
                   <View style={s.reminder}>
                     <Text style={s.reminderText}>{t.surveyReminder}</Text>
                     <View style={s.reminderButtons}>
@@ -783,7 +829,8 @@ export default function HomeScreen() {
                       </Pressable>
                     </View>
                   </View>
-                ) : null
+                ) : null}
+                </>
               }
               ListEmptyComponent={
                 <View style={s.empty}>
@@ -999,6 +1046,14 @@ function ShopRow({
   const { theme, t } = useSettings();
   const s = styles(theme);
   const { value } = splitDistance(shop.distance_m);
+  const personal = usePersonal();
+  const mine = personal.ratingOf(shop.id);
+  /* This rider's own marks on the shop, so a scan of the list shows where they have been. */
+  const marks = [
+    personal.isVisited(shop.id) ? t.visited : null,
+    personal.isSaved(shop.id) ? t.saved : null,
+    mine ? `${t.yourRating} ${overall(mine).toFixed(1)} ★` : null,
+  ].filter(Boolean);
 
   const label = shop.status === 'open' ? t.open : shop.status === 'closed' ? t.closed : t.unknown;
   const pill = shop.status === 'open' ? s.pillOpen : shop.status === 'closed' ? s.pillClosed : s.pillUnknown;
@@ -1067,6 +1122,7 @@ function ShopRow({
         <Text style={s.distSmall}>
           ≈ {value} {t.km.toLowerCase()}
         </Text>
+        {marks.length > 0 && <Text style={s.marks}>{marks.join(' · ')}</Text>}
       </View>
 
       {shop.phone ? (
@@ -1270,6 +1326,7 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     ratingAvg: { fontSize: 13, fontWeight: '700', color: theme.ink },
     ratingCount: { fontSize: 12.5, color: theme.ink3 },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    marks: { fontSize: 13, fontWeight: '700', color: theme.open },
     tags: { fontSize: 13, color: theme.ink3, flexShrink: 1 },
 
     pill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 5 },

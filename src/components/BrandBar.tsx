@@ -43,8 +43,24 @@ export function Wordmark({ size = 19 }: { size?: number }) {
 /**
  * The compact band: a back control, a title, and the wordmark as a home button.
  * Used on every screen that is not home.
+ *
+ * A FORM passes `action` instead, and the wordmark's place holds that action (Save).
+ * On a form the wordmark was a trap: it sits where the thumb reaches for Save while the
+ * keyboard hides the real Save button, and one tap on it left the form with nothing
+ * kept. The top of the screen is the one place the keyboard never covers.
  */
-export function BrandBar({ title, close }: { title: string; close?: boolean }) {
+export function BrandBar({
+  title,
+  close,
+  action,
+  home = true,
+}: {
+  title: string;
+  close?: boolean;
+  action?: { label: string; onPress: () => void };
+  /** False on forms: no wordmark home button even when there is no action to show. */
+  home?: boolean;
+}) {
   const { theme, t } = useSettings();
   const router = useRouter();
   const s = styles(theme);
@@ -69,15 +85,26 @@ export function BrandBar({ title, close }: { title: string; close?: boolean }) {
         `dismissTo` unwinds the stack back to the list rather than pushing another copy
         of it on top, so the Android back button still behaves afterwards.
       */}
-      <Pressable
-        onPress={() => router.dismissTo('/')}
-        hitSlop={10}
-        style={s.brandBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Ayos, back to the shop list"
-      >
-        <Wordmark />
-      </Pressable>
+      {action ? (
+        <Pressable
+          onPress={action.onPress}
+          hitSlop={10}
+          style={({ pressed }) => [s.actionBtn, pressed && { opacity: 0.6 }]}
+          accessibilityRole="button"
+        >
+          <Text style={s.actionText}>{action.label}</Text>
+        </Pressable>
+      ) : !home ? null : (
+        <Pressable
+          onPress={() => router.dismissTo('/')}
+          hitSlop={10}
+          style={s.brandBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Ayos, back to the shop list"
+        >
+          <Wordmark />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -127,4 +154,14 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     closeGlyph: { fontSize: 17, lineHeight: 20, color: theme.bandInk },
     title: { flex: 1, fontSize: 16, fontWeight: '700', color: theme.bandInk },
     brandBtn: { paddingHorizontal: 6, paddingVertical: 6 },
+    actionBtn: {
+      minHeight: 40,
+      paddingHorizontal: 18,
+      borderRadius: 20,
+      /* The band's own colours, swapped: in light mode the band IS the button colour. */
+      backgroundColor: theme.bandInk,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actionText: { fontSize: 16, fontWeight: '700', color: theme.bandBg },
   });

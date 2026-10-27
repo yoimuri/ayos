@@ -123,6 +123,35 @@ export type Strings = {
   hideSearch: string;
   tourDrag: string;
 
+  // My shops
+  myShops: string;
+  tabSaved: string;
+  tabVisited: string;
+  tabRated: string;
+  emptySaved: string;
+  emptyVisited: string;
+  emptyRated: string;
+  save: string;
+  saved: string;
+  markVisited: string;
+  visited: string;
+  yourRating: string;
+  showBreakdown: string;
+
+  // Rating parts
+  partService: string;
+  partServiceHint: string;
+  partPrice: string;
+  partPriceHint: string;
+  partAssistance: string;
+  partAssistanceHint: string;
+  overallScore: string;
+  rateAllThree: string;
+
+  // Field survey mode (developer feature)
+  fieldMode: string;
+  fieldModeInfo: string;
+
   // Tutorial
   tourList: string;
   tourActions: string;
@@ -243,6 +272,33 @@ const en: Strings = {
   showSearch: 'Show search',
   hideSearch: 'Hide search',
   tourDrag: 'Drag this bar down to see more of the map, or up to see more of the list.',
+
+  myShops: 'My shops',
+  tabSaved: 'Saved',
+  tabVisited: 'Visited',
+  tabRated: 'Rated',
+  emptySaved: 'No saved shops yet. Open a shop and tap Save.',
+  emptyVisited: 'No visited shops yet. Open a shop and tap Visited.',
+  emptyRated: 'You have not rated a shop yet.',
+  save: 'Save',
+  saved: 'Saved',
+  markVisited: 'Visited?',
+  visited: 'Visited',
+  yourRating: 'Your rating',
+  showBreakdown: 'Tap to see the breakdown',
+
+  partService: 'Service',
+  partServiceHint: 'How happy you are with the repair or maintenance they did',
+  partPrice: 'Price',
+  partPriceHint: 'Whether the price was worth the work',
+  partAssistance: 'Assistance',
+  partAssistanceHint: 'How the staff dealt with what you needed',
+  overallScore: 'Overall',
+  rateAllThree: 'Give all three a star rating to continue.',
+
+  fieldMode: 'Field survey mode',
+  fieldModeInfo:
+    "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
 
   tourList: 'These are the shops nearest to you. Tap one to see it.',
   tourActions: 'From here you can call the shop, text them, or get directions.',
@@ -365,6 +421,33 @@ const tl: Strings = {
   showSearch: 'Ipakita ang search',
   hideSearch: 'Itago ang search',
   tourDrag: 'Hilahin pababa ang bar na ito para makita ang mapa, o pataas para sa listahan.',
+
+  myShops: 'Mga shop ko',
+  tabSaved: 'Naka-save',
+  tabVisited: 'Napuntahan',
+  tabRated: 'Na-rate',
+  emptySaved: 'Wala pang naka-save. Buksan ang shop at pindutin ang I-save.',
+  emptyVisited: 'Wala pang napuntahan. Buksan ang shop at pindutin ang Napuntahan.',
+  emptyRated: 'Wala ka pang na-rate na shop.',
+  save: 'I-save',
+  saved: 'Naka-save',
+  markVisited: 'Napuntahan?',
+  visited: 'Napuntahan',
+  yourRating: 'Rating mo',
+  showBreakdown: 'Pindutin para makita ang detalye',
+
+  partService: 'Serbisyo',
+  partServiceHint: 'Gaano ka kasaya sa pagkaka-ayos o maintenance na ginawa nila',
+  partPrice: 'Presyo',
+  partPriceHint: 'Sulit ba ang singil sa trabaho',
+  partAssistance: 'Pag-aasikaso',
+  partAssistanceHint: 'Paano ka inasikaso ng mga tauhan',
+  overallScore: 'Kabuuan',
+  rateAllThree: 'Bigyan ng star ang tatlo para makatuloy.',
+
+  fieldMode: 'Field survey mode',
+  fieldModeInfo:
+    "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
 
   tourList: "Ito ang mga shop na pinakamalapit sa'yo. Pindutin ang isa para makita.",
   tourActions: 'Dito ka puwedeng tumawag, mag-text, o humanap ng daan papunta sa shop.',

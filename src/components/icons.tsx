@@ -9,7 +9,7 @@ import { Platform, Text, View, type TextStyle } from 'react-native';
  * FONT reaches the same shapes through a mechanism the build already has.
  *
  * WHERE THE GLYPHS COME FROM. `assets/fonts/AyosIcons.ttf` is Material Icons, subset to
- * the eleven glyphs this app uses. The full family is 348 KB; subset it is about 2 KB. That
+ * the fifteen glyphs this app uses. The full family is 348 KB; subset it is about 2 KB. That
  * matters because the file rides along on every over-the-air update, so its size is a
  * recurring cost rather than a one-off — the same reasoning that took the wordmark from
  * about 200 KB to 14. Generated with fonttools, exactly as the wordmark was.
@@ -20,7 +20,7 @@ import { Platform, Text, View, type TextStyle } from 'react-native';
  * Command (add the new code point to the list):
  *
  *   python -m fontTools.subset MaterialIcons-Regular.ttf --layout-features="" --no-hinting
- *     --unicodes="U+E0B0,U+E0CB,U+E0E1,U+E55C,U+E55F,U+E88F,U+E8B8,U+E8FF,U+E5CF,U+E5CE,U+E8B6"
+ *     --unicodes="U+E0B0,U+E0CB,U+E0E1,U+E55C,U+E55F,U+E88F,U+E8B8,U+E8FF,U+E5CF,U+E5CE,U+E8B6,U+E866,U+E867,U+E86C,U+E3C9"
  *     --output-file=assets/fonts/AyosIcons.ttf
  *
  * THIS IS NOT THE SAME THING AS TYPING ✆ OR ✉, and the distinction is the whole point.
@@ -60,6 +60,14 @@ export const GLYPH = {
   expandLess: '\uE5CE',
   /** Magnifier: search. */
   search: '\uE8B6',
+  /** Bookmark, filled: saved. */
+  saved: '\uE866',
+  /** Bookmark, outlined: not saved. */
+  save: '\uE867',
+  /** Check in a circle: visited. */
+  visited: '\uE86C',
+  /** Pencil: edit (field survey mode). */
+  edit: '\uE3C9',
 } as const;
 
 /**
@@ -117,6 +125,18 @@ export function InfoIcon({ size = 24, color }: { size?: number; color: string })
 /** Open (down) or close (up), for anything that folds away. */
 export function ExpandIcon({ open, size = 24, color }: { open: boolean; size?: number; color: string }) {
   return <Glyph char={open ? GLYPH.expandLess : GLYPH.expandMore} size={size} color={color} />;
+}
+
+export function SavedIcon({ on, size = 24, color }: { on: boolean; size?: number; color: string }) {
+  return <Glyph char={on ? GLYPH.saved : GLYPH.save} size={size} color={color} />;
+}
+
+export function VisitedIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.visited} size={size} color={color} />;
+}
+
+export function EditIcon({ size = 24, color }: { size?: number; color: string }) {
+  return <Glyph char={GLYPH.edit} size={size} color={color} />;
 }
 
 export function SearchIcon({ size = 24, color }: { size?: number; color: string }) {

@@ -1,14 +1,17 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ContactCard } from '@/components/ContactCard';
 import { ReviewList } from '@/components/ReviewList';
-import { ChatIcon, NavIcon, PhoneIcon } from '@/components/icons';
+import { ChatIcon, EditIcon, NavIcon, PhoneIcon, SavedIcon, VisitedIcon } from '@/components/icons';
 import { useTourTarget } from '@/components/Tour';
 import { clockLabel, isAllDay, type Hours } from '@/lib/data/hours';
 import type { Shop } from '@/lib/data/types';
 import { splitDistance } from '@/lib/geo/distance';
 import type { Strings } from '@/lib/i18n/strings';
+import { overall } from '@/lib/personal/model';
+import { usePersonal } from '@/lib/personal/store';
 import { MIN_RATINGS_FOR_AVERAGE } from '@/lib/ratings/rules';
 import { useSettings } from '@/lib/settings/store';
 
@@ -111,8 +114,15 @@ export function ShopDetailsHeader({ shop, onBack }: { shop: Shop; onBack: () => 
 }
 
 export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => void }) {
-  const { theme, t } = useSettings();
+  const { theme, t, settings } = useSettings();
   const s = styles(theme);
+  const router = useRouter();
+  const personal = usePersonal();
+  const isSaved = personal.isSaved(shop.id);
+  const isVisited = personal.isVisited(shop.id);
+  const mine = personal.ratingOf(shop.id);
+  /* The breakdown behind "Your rating", shown on tap. */
+  const [showParts, setShowParts] = useState(false);
   const actionsRef = useTourTarget('details-actions');
   /*
     ONE NUMBER: Call and Message go straight to the phone's dialler or messages, which is
@@ -176,6 +186,48 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
           <Text style={s.actLabel}>{t.directions}</Text>
         </Pressable>
       </View>
+
+      {/*
+        MY SHOPS: Save and Visited, toggled by hand, kept on this phone only. A visited
+        shop also gets a different pin colour on the map.
+      */}
+      <View style={s.toggleRow}>
+        <Pressable
+          onPress={() => personal.toggleSaved(shop.id)}
+          style={({ pressed }) => [s.toggle, isSaved && s.toggleOn, pressed && s.pressed]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isSaved }}
+        >
+          <SavedIcon on={isSaved} size={20} color={isSaved ? theme.call : theme.ink2} />
+          <Text style={[s.toggleText, isSaved && s.toggleTextOn]}>{isSaved ? t.saved : t.save}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => personal.toggleVisited(shop.id)}
+          style={({ pressed }) => [s.toggle, isVisited && s.toggleOnVisited, pressed && s.pressed]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isVisited }}
+        >
+          <VisitedIcon size={20} color={isVisited ? theme.open : theme.ink2} />
+          <Text style={[s.toggleText, isVisited && s.toggleTextVisited]}>{isVisited ? t.visited : t.markVisited}</Text>
+        </Pressable>
+      </View>
+
+      {/*
+        FIELD SURVEY MODE (developer feature, removed before launch): the surveyor corrects
+        this shop's details. Shown only with the mode on.
+      */}
+      {settings.fieldMode && (
+        <Pressable
+          onPress={() => router.push({ pathname: '/fieldwork/shop', params: { id: shop.id } })}
+          style={({ pressed }) => [s.surveyBtn, pressed && s.pressed]}
+          accessibilityRole="button"
+        >
+          <EditIcon size={20} color={theme.bg} />
+          <Text style={s.surveyBtnText}>
+            Update shop info{shop.isNew ? ' · added by you' : shop.edited ? ' · edited on this phone' : ''}
+          </Text>
+        </Pressable>
+      )}
 
       {!shop.phone && (
         <View style={s.noticeBox}>
@@ -266,6 +318,32 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
         {!showAverage && <Text style={s.help}>{t.averageHidden(MIN_RATINGS_FOR_AVERAGE)}</Text>}
       </View>
 
+      {/*
+        YOUR OWN RATING, if you gave one: one overall score, and the three parts behind it
+        on a tap. Kept on this phone until ratings are stored on the server.
+      */}
+      {mine && (
+        <Pressable
+          onPress={() => setShowParts((v) => !v)}
+          style={({ pressed }) => [s.mine, pressed && s.pressed]}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showParts }}
+        >
+          <Text style={s.mineTitle}>
+            {t.yourRating}: {overall(mine).toFixed(1)} ★
+          </Text>
+          {showParts ? (
+            <View style={s.mineParts}>
+              <Text style={s.minePart}>{t.partService}: {mine.service.toFixed(1)} ★</Text>
+              <Text style={s.minePart}>{t.partPrice}: {mine.price.toFixed(1)} ★</Text>
+              <Text style={s.minePart}>{t.partAssistance}: {mine.assistance.toFixed(1)} ★</Text>
+            </View>
+          ) : (
+            <Text style={s.help}>{t.showBreakdown}</Text>
+          )}
+        </Pressable>
+      )}
+
       <ReviewList reviews={shop.ratings} />
 
       <Pressable onPress={onRate} style={s.rateCta} accessibilityRole="button">
@@ -327,6 +405,46 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     actOutline: { borderWidth: 1.5, borderColor: theme.line, backgroundColor: theme.surface },
     actLabel: { fontSize: 12, fontWeight: '600', color: theme.ink2 },
     pressed: { opacity: 0.6 },
+    toggleRow: { flexDirection: 'row', gap: 10 },
+    toggle: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: theme.line,
+      backgroundColor: theme.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    toggleOn: { borderColor: theme.call, backgroundColor: theme.callFill },
+    toggleOnVisited: { borderColor: theme.open, backgroundColor: theme.openFill },
+    toggleText: { fontSize: 15, fontWeight: '600', color: theme.ink2 },
+    toggleTextOn: { color: theme.call, fontWeight: '700' },
+    toggleTextVisited: { color: theme.open, fontWeight: '700' },
+    surveyBtn: {
+      minHeight: 48,
+      borderRadius: 12,
+      backgroundColor: theme.ink2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+    },
+    surveyBtnText: { fontSize: 15, fontWeight: '700', color: theme.bg },
+    mine: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.line,
+      backgroundColor: theme.surface,
+      padding: 14,
+      gap: 6,
+    },
+    mineTitle: { fontSize: 16, fontWeight: '700', color: theme.ink },
+    mineParts: { gap: 4 },
+    minePart: { fontSize: 15, color: theme.ink2 },
 
     noticeBox: {
       backgroundColor: theme.accentFill,

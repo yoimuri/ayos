@@ -64,7 +64,7 @@ import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
  * `positron` is the muted grey style rather than the colourful one, because the map is a
  * background: the oxide pins have to be the loudest thing on it.
  */
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
+export const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 
 /**
  * OpenStreetMap's licence requires visible credit, and this style ships no `attribution`
@@ -97,7 +97,7 @@ const CLUSTER_RADIUS_PX = 58;
  * roughly six kilometres of margin, so a rider standing at the outermost shop can still
  * pan far enough to see where they are going.
  */
-const METRO_MANILA: [number, number, number, number] = [120.87, 14.30, 121.19, 14.84];
+export const METRO_MANILA: [number, number, number, number] = [120.87, 14.30, 121.19, 14.84];
 
 /**
  * Everywhere that is not Metro Manila, as one polygon.
@@ -273,8 +273,11 @@ export function RealMap({
   obscuredBottom = 0,
   /** True in List mode, when the panel covers the whole map. */
   mapHidden = false,
+  visited,
 }: {
   shops: Shop[];
+  /** Ids of shops this rider marked Visited; their pins are drawn green. */
+  visited?: string[];
   onPressPin: (shop: Shop) => void;
   focus?: { shop: Shop; nonce: number } | null;
   centerBias?: number;
@@ -480,22 +483,22 @@ export function RealMap({
     Handed over as one GeoJSON collection instead, the map draws them itself in native
     code, and React renders nothing per shop at all.
 
-    Only `id` and `name` travel with each point. Everything else the screens need is
+    Only `id`, `name` and `visited` travel with each point. Everything else the screens need is
     already in the shops array on this side; sending it again would triple the size of
     something that crosses the bridge whenever the list changes.
   */
-  const collection = useMemo(
-    () => ({
+  const collection = useMemo(() => {
+    const seen = new Set(visited ?? []);
+    return {
       type: 'FeatureCollection' as const,
       features: shops.map((shop) => ({
         type: 'Feature' as const,
         id: shop.id,
-        properties: { id: shop.id, name: shop.name },
+        properties: { id: shop.id, name: shop.name, visited: seen.has(shop.id) },
         geometry: { type: 'Point' as const, coordinates: [shop.lng, shop.lat] },
       })),
-    }),
-    [shops],
-  );
+    };
+  }, [shops, visited]);
 
   const byId = useMemo(() => new Map(shops.map((shop) => [shop.id, shop])), [shops]);
 
@@ -834,7 +837,8 @@ export function RealMap({
             type="circle"
             filter={['!', ['has', 'point_count']]}
             paint={{
-              'circle-color': mapTheme.accent,
+              /* VISITED shops are green (the "open" colour), the rest the usual accent. */
+              'circle-color': ['case', ['==', ['get', 'visited'], true], mapTheme.open, mapTheme.accent],
               'circle-radius': 7,
               'circle-stroke-width': 2,
               'circle-stroke-color': mapTheme.onFilled,

@@ -1,5 +1,20 @@
 import { useMemo } from 'react';
 
+import {
+  closedText,
+  currentValues,
+  parseClosed,
+  parseLinks,
+  parseLocation,
+  parsePhones,
+  parseTags,
+  parseTime,
+  timeText,
+  type LogField,
+  type FieldworkData,
+  type NewShop,
+} from '@/lib/fieldwork/model';
+import { useFieldwork } from '@/lib/fieldwork/store';
 import { AREA_CENTRES, AREA_LABELS, type Area } from '@/lib/settings/store';
 
 import { statusAt, type Hours } from './hours';
@@ -184,4 +199,109 @@ export function useShops(from: [number, number] | null, area: Area | null): Shop
     */
     // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, [Math.round(olng * 1000), Math.round(olat * 1000)]);
+}
+
+/*
+  FIELD SURVEY MODE (developer feature): the surveyor's corrections and added shops, laid
+  over the list on THEIR phone only. The original list is untouched; this only changes
+  what this phone draws, so the surveyor sees what they typed straight away.
+*/
+
+function hoursFrom(time: string, closed: string): Hours | undefined {
+  const t = parseTime(time);
+  const c = parseClosed(closed);
+  if (!t && c === null) return undefined;
+  return { ...(t ?? {}), ...(c !== null ? { closed: c } : {}) };
+}
+
+function patched(shop: Shop, v: Partial<Record<LogField, string>>, from: [number, number], now: Date): Shop {
+  const phones = v.contact !== undefined ? parsePhones(v.contact) : shop.phones;
+  const hours =
+    v.time !== undefined || v.closed !== undefined
+      ? hoursFrom(v.time ?? timeText(shop.hours), v.closed ?? closedText(shop.hours?.closed))
+      : shop.hours;
+  const { status, until } = statusAt(hours, now);
+  /* A pin moved on this phone: the shop is drawn there, and measured from there. */
+  const moved = v.location !== undefined ? parseLocation(v.location) : null;
+  const place = moved
+    ? {
+        lat: moved.lat,
+        lng: moved.lng,
+        distance_m: metresBetween(from, [moved.lng, moved.lat]),
+        bearing: bearingFor(moved.lng - from[0], moved.lat - from[1]),
+        area: areaFor(moved.lng, moved.lat),
+      }
+    : {};
+  return {
+    ...shop,
+    ...place,
+    name: v.name || shop.name,
+    address: v.address ?? shop.address,
+    phones,
+    phone: phones[0] ?? null,
+    links: v.social !== undefined ? parseLinks(v.social).map(linkFor) : shop.links,
+    tags: v.services !== undefined ? (parseTags(v.services) as ShopTag[]) : shop.tags,
+    hours,
+    status,
+    openUntil: until,
+    edited: true,
+  };
+}
+
+function fromNewShop(n: NewShop, from: [number, number], now: Date): Shop {
+  const phones = parsePhones(n.values.contact ?? '');
+  const hours = hoursFrom(n.values.time ?? '', n.values.closed ?? '');
+  const { status, until } = statusAt(hours, now);
+  return {
+    id: n.id,
+    name: n.values.name || 'New shop',
+    address: n.values.address ?? '',
+    phone: phones[0] ?? null,
+    phones,
+    tags: parseTags(n.values.services ?? '') as ShopTag[],
+    status,
+    openUntil: until,
+    hours,
+    links: parseLinks(n.values.social ?? '').map(linkFor),
+    distance_m: metresBetween(from, [n.lng, n.lat]),
+    bearing: bearingFor(n.lng - from[0], n.lat - from[1]),
+    lng: n.lng,
+    lat: n.lat,
+    area: areaFor(n.lng, n.lat),
+    ratingCount: 0,
+    ratingAvg: null,
+    ratings: [],
+    isNew: true,
+  };
+}
+
+/** The list with this phone's survey corrections and added shops applied. */
+export function withFieldwork(base: Shop[], fw: FieldworkData, from: [number, number], now: Date): Shop[] {
+  if (fw.log.length === 0 && fw.added.length === 0) return base;
+  const edited = base.map((shop) => {
+    const v = currentValues(fw, shop.id);
+    return Object.keys(v).length ? patched(shop, v, from, now) : shop;
+  });
+  return [...edited, ...fw.added.map((n) => fromNewShop(n, from, now))];
+}
+
+/**
+ * The shops every screen should draw: the surveyed list, plus this phone's survey work
+ * when there is any. Screens use this rather than `useShops` directly.
+ */
+export function useAppShops(from: [number, number] | null, area: Area | null): Shop[] {
+  const base = useShops(from, area);
+  const { data } = useFieldwork();
+  const origin = from ?? AREA_CENTRES[area ?? 'other'];
+  return useMemo(
+    () => withFieldwork(base, data, origin, new Date()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [base, data],
+  );
+}
+
+/** One shop by id, from the same list. */
+export function useAppShop(id: string, from: [number, number] | null, area: Area | null): Shop | undefined {
+  const all = useAppShops(from, area);
+  return useMemo(() => all.find((s) => s.id === id), [all, id]);
 }

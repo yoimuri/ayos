@@ -98,6 +98,11 @@ export type Settings = {
   surveyState: 'unasked' | 'later' | 'answered' | 'never';
   /** The search box folded away with the chevron in the top bar. */
   searchHidden: boolean;
+  /**
+   * FIELD SURVEY MODE (developer feature, removed before the official launch): shows the
+   * "Update shop info" form on every shop, "Add a shop", and the survey export.
+   */
+  fieldMode: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -112,6 +117,7 @@ const DEFAULTS: Settings = {
   palette: 'oxide',
   surveyState: 'unasked',
   searchHidden: false,
+  fieldMode: false,
 };
 
 /**

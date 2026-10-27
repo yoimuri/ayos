@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from import_shops import (  # noqa: E402
     build,
+    collapse,
+    compare_with_app,
     city_from_address,
     clean_text,
     format_phone,
@@ -22,6 +24,8 @@ from import_shops import (  # noqa: E402
     parse_phones,
     parse_tags,
     parse_time,
+    plan_survey,
+    same_value,
     similar_names,
 )
 
@@ -173,6 +177,20 @@ class City(unittest.TestCase):
         self.assertEqual(len(facts["city_unclear"]), 1)
 
 
+class CompareWithApp(unittest.TestCase):
+    def test_removing_one_copy_of_a_duplicate_reports_one_shop_gone(self):
+        import json, os, tempfile
+        shop = {"name": "KRD", "lat": 14.7615, "lng": 121.0641}
+        other = {"name": "Raki", "lat": 14.6996, "lng": 121.0479}
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "shops.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"shops": [shop, dict(shop), other]}, fh)
+            diff = compare_with_app([dict(shop)], path)
+        self.assertEqual(len(diff["gone"]), 2, "one KRD copy and Raki, not both KRD copies")
+        self.assertEqual(sorted(n for n, _, _ in diff["gone"]), ["KRD", "Raki"])
+
+
 class Rows(unittest.TestCase):
     def test_no_coordinates_is_skipped_and_listed(self):
         shops, facts = build([row(2), row(7, lat=None, lng=None)])
@@ -198,6 +216,69 @@ class Rows(unittest.TestCase):
         a, _ = build([row(2, name="A"), row(3, name="B", lat=14.7)])
         b, _ = build([row(2, name="B", lat=14.7), row(3, name="A")])
         self.assertEqual({s["name"]: s["id"] for s in a}, {s["name"]: s["id"] for s in b})
+
+
+def change(shop_id, column, field, before, after, date="2026-10-12 09:00", shop="Shop 2"):
+    return {"date": date, "shop_id": shop_id, "shop": shop, "column": column, "field": field,
+            "before": before, "after": after}
+
+
+class SurveyMerge(unittest.TestCase):
+    """--survey: the surveyor's edits go in only while the sheet still says what they saw."""
+
+    def setUp(self):
+        self.rows = [row(2, phone="None", time="9:00 - 20:00", email="None"), row(3, name="Other", lat=14.61)]
+        self.sid = build(self.rows)[0][0]["id"]
+
+    def plan(self, changes=(), added=()):
+        return plan_survey(self.rows, [("survey.xlsx", list(changes), list(added))])
+
+    def test_applies_when_the_sheet_still_says_what_the_surveyor_saw(self):
+        writes, _, facts, merged = self.plan([change(self.sid, "Contact No.", "phone", "", "0917 123 4567")])
+        self.assertEqual(writes[0][:3], (2, "phone", "0917 123 4567"))
+        self.assertEqual(len(facts["applied"]), 1)
+        self.assertEqual(merged[0]["phone"], "0917 123 4567")
+
+    def test_the_same_number_written_differently_is_not_a_change(self):
+        self.assertTrue(same_value("phone", "0915 9777778", "0915-977-7778"))
+        self.assertTrue(same_value("services", "Repair, Parts", "parts,repair"))
+        self.assertFalse(same_value("time", "9:00 - 20:00", "8:00 - 17:00"))
+
+    def test_a_cell_changed_since_is_a_conflict_and_left_alone(self):
+        writes, _, facts, _ = self.plan([change(self.sid, "Time", "time", "10:00 - 19:00", "8:00 - 17:00")])
+        self.assertEqual(writes, [])
+        self.assertEqual(facts["conflicts"][0][3:6], ("9:00 - 20:00", "10:00 - 19:00", "8:00 - 17:00"))
+
+    def test_email_fills_an_empty_cell_but_never_overwrites_one(self):
+        writes, _, _, _ = self.plan([change(self.sid, "Email", "email", "", "shop@example.com")])
+        self.assertEqual(writes[0][2], "shop@example.com")
+        self.rows[0]["email"] = "owner@example.com"
+        writes, _, facts, _ = self.plan([change(self.sid, "Email", "email", "", "shop@example.com")])
+        self.assertEqual((writes, len(facts["conflicts"])), ([], 1))
+
+    def test_a_moved_pin_writes_both_coordinates(self):
+        writes, _, _, _ = self.plan([change(self.sid, "Latitude, Longitude", "location",
+                                            "14.6000000, 121.0000000", "14.6001000, 121.0002000")])
+        self.assertEqual([(w[1], w[2]) for w in writes], [("lat", 14.6001), ("lng", 121.0002)])
+
+    def test_unknown_shop_is_listed_and_a_unique_name_is_the_fallback(self):
+        _, _, facts, _ = self.plan([change("sdeadbeef", "Time", "time", "", "8:00 - 17:00", shop="Nowhere")])
+        self.assertEqual(len(facts["missing"]), 1)
+        writes, _, facts, _ = self.plan([change("sdeadbeef", "Time", "time", "9:00 - 20:00", "8:00 - 17:00")])
+        self.assertEqual((writes[0][0], len(facts["by_name"])), (2, 1))
+
+    def test_new_shops_go_at_the_bottom_once(self):
+        new = {"name": "New Moto", "lat": 14.65, "lng": 121.03, "phone": "0918 765 4321"}
+        _, appends, facts, _ = self.plan(added=[new])
+        self.assertEqual(appends[0][0], 4, "straight after the last row")
+        self.rows.append(row(4, name="New Moto", lat=14.65, lng=121.03))
+        _, appends, facts, _ = self.plan(added=[new])
+        self.assertEqual((appends, len(facts["already_added"])), ([], 1), "merging the same file twice is harmless")
+
+    def test_several_edits_to_one_cell_are_one_change(self):
+        merged = collapse([change("s1", "Time", "time", "a", "b", "2026-10-12 09:00"),
+                           change("s1", "Time", "time", "b", "c", "2026-10-12 10:00")])
+        self.assertEqual([(c["before"], c["after"]) for c in merged], [("a", "c")])
 
 
 if __name__ == "__main__":

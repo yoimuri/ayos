@@ -11,6 +11,15 @@ RUN IT, IN THIS ORDER:
     python scripts/import_shops.py --apply    3. only then: copy the candidate into
                                                  src/lib/data/shops.json.
 
+FIELD SURVEY FILES from the app (ayos-survey-*.xlsx) are merged into the sheet first:
+
+    python scripts/import_shops.py --survey ayos-survey-2026-10-12_1530.xlsx [more files]
+
+which writes a merged COPY of the sheet into scripts/out/ (changed cells yellow, new
+shops green, each with a comment saying what it was) and a merge report. A person checks
+that copy, it becomes the field sheet, and then steps 1-3 run as usual. See "survey
+merge" below for the rules.
+
 WHY TWO STEPS. The shop list is field work collected shop by shop, and the app ships
 it to every rider on the next update. A script that silently drops, merges or rewrites
 rows is a script nobody can trust, so this one changes NOTHING the app reads until
@@ -56,11 +65,12 @@ ROOT = os.path.dirname(HERE)
 The field spreadsheet lives OUTSIDE the repository, in a folder next to it, because it is
 the field team's working file, not app code. Override with --xlsx for any other location.
 """
-DEFAULT_XLSX = os.path.join(ROOT, os.pardir, "moto-app dataset", "Motorcycle Repairs_coordinates (1).xlsx")
+DEFAULT_XLSX = os.path.join(ROOT, os.pardir, "moto-app dataset", "Motorcycle Repairs_coordinates.xlsx")
 DEFAULT_SHEET = "NCR"
 OUT_DIR = os.path.join(HERE, "out")
 CANDIDATE = os.path.join(OUT_DIR, "shops.candidate.json")
 REPORT = os.path.join(OUT_DIR, "import-report.md")
+SURVEY_REPORT = os.path.join(OUT_DIR, "survey-merge-report.md")
 APP_FILE = os.path.join(ROOT, "src", "lib", "data", "shops.json")
 
 """
@@ -79,6 +89,9 @@ COLUMNS = {
     "time": "time",
     "day closed": "closed",
     "image": "image",
+    # Written by --survey; the import itself does not read it.
+    "survey note": "note",
+    "note": "note",
 }
 
 ALLOWED_TAGS = ("dealer", "repair", "parts", "accessories")
@@ -437,6 +450,11 @@ def read_sheet(path, sheet):
 
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb[sheet] if sheet in wb.sheetnames else wb.worksheets[0]
+    return read_rows(ws), ws.title
+
+
+def read_rows(ws):
+    """Every non-empty row of a worksheet as {field: value, "_row": sheet row number}."""
     rows = ws.iter_rows(values_only=True)
     header = next(rows, None) or ()
     index = {}
@@ -454,7 +472,7 @@ def read_sheet(path, sheet):
         rec = {f: (row[p] if p < len(row) else None) for f, p in index.items()}
         rec["_row"] = n
         out.append(rec)
-    return out, ws.title
+    return out
 
 
 def build(rows):
@@ -570,7 +588,19 @@ def compare_with_app(shops, app_file):
     now = Counter(key(s) for s in current)
     new = Counter(key(s) for s in shops)
     missing = now - new
-    gone = sorted((s["name"], round(s["lat"], 4), round(s["lng"], 4)) for s in current if key(s) in missing)
+    """
+    One row per MISSING COPY. When the sheet had a shop twice and one copy was deleted, only
+    that one copy is gone; listing every row with the same name and position reported both
+    copies as disappearing (seen 11 Oct 2026: one KRD duplicate shown as two shops gone).
+    """
+    gone = []
+    left = dict(missing)
+    for s in current:
+        k = key(s)
+        if left.get(k, 0) > 0:
+            gone.append((s["name"], round(s["lat"], 4), round(s["lng"], 4)))
+            left[k] -= 1
+    gone.sort()
     added = sum((new - now).values())
     return {"current": len(current), "gone": gone, "added": added, "kept": sum((now & new).values())}
 
@@ -675,6 +705,378 @@ def write_report(path, source, sheet, collected_at, rows, shops, facts, diff, si
         fh.write("\n".join(L))
 
 
+# ------------------------------------------------------------------ survey merge
+
+"""
+MERGING A FIELD SURVEY INTO THE SHEET (--survey).
+
+The app's survey export is one .xlsx with a "Changes" tab (every edit: shop id, column,
+before, after) and a "New shops" tab (rows in the sheet's columns). This folds both into
+a COPY of the field sheet, so nobody retypes anything:
+
+    - an edit is applied only while the sheet still says what the surveyor saw
+      ("before"). If someone changed that cell since, it is a CONFLICT: left alone and
+      listed, never decided by the script;
+    - values are compared the way the app reads them, so "0915 9777778" and
+      "0915-977-7778" are the same number and only real changes count;
+    - email and note were never in the app, so the surveyor had no "before" for them:
+      they fill an empty cell, and anything already there is a conflict;
+    - a shop whose id is not in the sheet any more (renamed, moved or deleted since) is
+      listed, not guessed at;
+    - new shops are appended at the bottom; one already in the sheet (same name, same
+      spot) is not added twice, so merging the same file again is harmless;
+    - every cell the merge writes is coloured (yellow changed, green added) and carries
+      a comment saying what it was before, so the person checking sees exactly what moved.
+
+Nothing the app reads is touched. The merged copy is checked by a person, becomes the
+field sheet, and only then goes through the normal import and --apply.
+
+plan_survey() decides everything on plain rows, so it is tested without a spreadsheet
+library; write_survey() only copies its decisions into the workbook.
+"""
+
+SURVEY_COLUMNS = {
+    "name": "name",
+    "address": "address",
+    "services": "services",
+    "contact no.": "phone",
+    "social media": "social",
+    "email": "email",
+    "time": "time",
+    "day closed": "closed",
+    "note": "note",
+    "latitude, longitude": "location",
+}
+"""Fields the app never had, so the survey's "before" for them is always blank."""
+UNKNOWN_TO_APP = ("email", "note")
+FIELD_HEADING = {"name": "Name", "address": "Address", "lat": "Latitude", "lng": "Longitude",
+                 "services": "Services", "phone": "Contact No.", "social": "Social Media",
+                 "email": "Email", "time": "Time", "closed": "Day Closed", "note": "Survey note"}
+"""About 1 m of latitude. Closer than that, two coordinates are the same pin."""
+SAME_SPOT = 1e-5
+FILL_CHANGED = "FFFFE58A"
+FILL_ADDED = "FFC9EBD3"
+
+
+def cell_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
+
+
+def parse_location(text):
+    """'14.6531200, 121.0345600' -> (lat, lng), or None."""
+    parts = [p.strip() for p in str(text or "").split(",")]
+    if len(parts) != 2:
+        return None
+    lat, lng = to_float(parts[0]), to_float(parts[1])
+    return None if lat is None or lng is None else (lat, lng)
+
+
+def same_value(field, a, b):
+    """True when two cells say the same thing as far as the app is concerned."""
+    if field == "phone":
+        return parse_phones(a)[0] == parse_phones(b)[0]
+    if field == "services":
+        return parse_tags(a)[0] == parse_tags(b)[0]
+    if field == "social":
+        return parse_links(a) == parse_links(b)
+    if field == "time":
+        return parse_time(a) == parse_time(b)
+    if field == "closed":
+        return parse_closed(a) == parse_closed(b)
+    norm = lambda v: " ".join((clean_text(v) or "").lower().split())
+    return norm(a) == norm(b)
+
+
+def read_survey(path):
+    """(changes, new shop records) from one app survey export."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, data_only=True)
+    if "Changes" not in wb.sheetnames or "New shops" not in wb.sheetnames:
+        sys.exit("%s is not an Ayos survey export (it has no Changes and New shops tabs)." % path)
+
+    def records(ws):
+        rows = ws.iter_rows(values_only=True)
+        head = [" ".join(str(c or "").lower().split()) for c in next(rows, ())]
+        return [dict(zip(head, r)) for r in rows if r and any(c not in (None, "") for c in r)]
+
+    changes = []
+    for r in records(wb["Changes"]):
+        field = SURVEY_COLUMNS.get(" ".join(cell_text(r.get("column")).lower().split()))
+        if field:
+            changes.append({
+                "date": cell_text(r.get("date")),
+                "shop_id": cell_text(r.get("shop id")),
+                "shop": cell_text(r.get("shop name")),
+                "column": cell_text(r.get("column")),
+                "field": field,
+                "before": cell_text(r.get("before")),
+                "after": cell_text(r.get("after")),
+            })
+    added = []
+    for r in records(wb["New shops"]):
+        rec = {COLUMNS[k]: v for k, v in r.items() if k in COLUMNS}
+        rec["note"] = r.get("note")
+        rec["added_on"] = cell_text(r.get("added on"))
+        added.append(rec)
+    return changes, added
+
+
+def collapse(changes):
+    """One change per shop and column: the FIRST before and the LAST after."""
+    out = {}
+    for c in sorted(changes, key=lambda c: c["date"]):  # stable: same-minute edits keep file order
+        key = (c["shop_id"], c["field"])
+        if key in out:
+            out[key]["after"], out[key]["date"] = c["after"], c["date"]
+        else:
+            out[key] = dict(c)
+    return list(out.values())
+
+
+def plan_survey(rows, surveys):
+    """
+    Decide every write. `rows` are read_rows() output; `surveys` is [(source name,
+    changes, new shops)]. Returns (writes, appends, facts, merged rows), where a write is
+    (sheet row, field, new value, comment) and an append is (sheet row, values by field,
+    comment). New rows go straight after the last row that has anything in it.
+    """
+    rows = [dict(r) for r in rows]
+    by_row = {r["_row"]: r for r in rows}
+    shops, _ = build(rows)
+    row_of = {s["id"]: s["_row"] for s in shops}
+    """
+    A shop's id comes from its name and position, so a pin moved by an earlier merge gives
+    it a new id. Fallback: the one row with the same name. Only when the name is unique,
+    and the before-check below still guards every write.
+    """
+    by_name = {}
+    for s in shops:
+        by_name.setdefault(" ".join(s["name"].lower().split()), []).append(s["_row"])
+    next_row = max([r["_row"] for r in rows] + [1]) + 1
+
+    writes, appends = [], []
+    facts = {"applied": [], "already": [], "conflicts": [], "missing": [], "unreadable": [],
+             "added": [], "already_added": [], "by_name": []}
+
+    for source, changes, added in surveys:
+        for c in collapse(changes):
+            n = row_of.get(c["shop_id"])
+            if n is None:
+                twins = by_name.get(" ".join(c["shop"].lower().split()), [])
+                if len(twins) == 1:
+                    n = twins[0]
+                    if not any(r == n for r, _, _ in facts["by_name"]):
+                        facts["by_name"].append((n, c["shop"], c["shop_id"]))
+            if n is None:
+                facts["missing"].append((c["shop"], c["shop_id"], c["column"], c["after"] or "(blank)", source))
+                continue
+            row = by_row[n]
+            name = clean_text(row.get("name")) or c["shop"]
+            note = "Survey %s (%s): was " % (c["date"], source)
+            shown = lambda v: clean_text(v) or "(blank)"
+
+            if c["field"] == "location":
+                after = parse_location(c["after"])
+                before = parse_location(c["before"])
+                now = (to_float(row.get("lat")), to_float(row.get("lng")))
+                if after is None:
+                    facts["unreadable"].append((n, name, c["column"], c["after"]))
+                    continue
+                close = lambda p, q: None not in (p[0], q[0]) and abs(p[0] - q[0]) <= SAME_SPOT and abs(p[1] - q[1]) <= SAME_SPOT
+                if close(now, after):
+                    facts["already"].append((n, name, c["column"]))
+                    continue
+                if before is not None and not close(now, before):
+                    facts["conflicts"].append((n, name, c["column"], "%s, %s" % now, c["before"], c["after"], source))
+                    continue
+                for field, value, was in (("lat", after[0], now[0]), ("lng", after[1], now[1])):
+                    writes.append((n, field, value, note + str(was)))
+                    row[field] = value
+                facts["applied"].append((n, name, c["column"], "%s, %s" % now, c["after"]))
+                continue
+
+            field = c["field"]
+            now = row.get(field)
+            if same_value(field, now, c["after"]) and cell_text(now):
+                facts["already"].append((n, name, c["column"]))
+                continue
+            if field in UNKNOWN_TO_APP:
+                fits = clean_text(now) is None
+            else:
+                fits = same_value(field, now, c["before"])
+            if not fits:
+                facts["conflicts"].append((n, name, c["column"], shown(now),
+                                           c["before"] or "(blank)", c["after"] or "(blank)", source))
+                continue
+            value = c["after"] or None
+            writes.append((n, field, value, note + shown(now)))
+            row[field] = value
+            facts["applied"].append((n, name, c["column"], shown(now), c["after"] or "(blank)"))
+
+        for rec in added:
+            name = clean_text(rec.get("name"))
+            lat, lng = to_float(rec.get("lat")), to_float(rec.get("lng"))
+            if not name or lat is None or lng is None:
+                facts["unreadable"].append(("new", name or "(no name)", "New shop", "missing name or coordinates"))
+                continue
+            twin = next((r for r in rows if same_value("name", r.get("name"), name)
+                         and to_float(r.get("lat")) is not None
+                         and abs(to_float(r.get("lat")) - lat) <= SAME_SPOT
+                         and abs(to_float(r.get("lng")) - lng) <= SAME_SPOT), None)
+            if twin:
+                facts["already_added"].append((twin["_row"], name))
+                continue
+            values = {f: rec.get(f) for f in ("name", "address", "lat", "lng", "services", "phone",
+                                               "social", "email", "time", "closed", "note")}
+            values["lat"], values["lng"] = lat, lng
+            new_row = dict(values, _row=next_row)
+            rows.append(new_row)
+            appends.append((next_row, values, "Added by survey %s (%s)" % (rec.get("added_on") or "", source)))
+            facts["added"].append((next_row, name))
+            next_row += 1
+
+    return writes, appends, facts, rows
+
+
+def write_survey(ws, writes, appends):
+    """Copy plan_survey's decisions into the worksheet: values, colours and comments."""
+    from openpyxl.comments import Comment
+    from openpyxl.styles import PatternFill
+
+    col = {}
+    last = 0
+    for i, cell in enumerate(ws[1], start=1):
+        key = " ".join(str(cell.value or "").lower().split())
+        if key:
+            last = i
+        if key in COLUMNS and COLUMNS[key] not in col:
+            col[COLUMNS[key]] = i
+
+    def column(field):
+        nonlocal last
+        if field not in col:  # only the survey note column can be missing
+            last += 1
+            ws.cell(1, last, FIELD_HEADING[field])
+            col[field] = last
+        return col[field]
+
+    changed = PatternFill("solid", fgColor=FILL_CHANGED)
+    new = PatternFill("solid", fgColor=FILL_ADDED)
+    for n, field, value, note in writes:
+        cell = ws.cell(n, column(field))
+        cell.value = value
+        cell.fill = changed
+        cell.comment = Comment(note, "Ayos survey")
+    for row, values, note in appends:
+        for field, value in values.items():
+            if value in (None, ""):
+                continue
+            cell = ws.cell(row, column(field))
+            cell.value = value
+            cell.fill = new
+        ws.cell(row, column("name")).comment = Comment(note, "Ayos survey")
+
+
+def write_survey_report(path, master, sources, facts, checks):
+    def table(head, body):
+        lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+        lines += ["| " + " | ".join(str(c).replace("|", "/") for c in r) + " |" for r in body]
+        return "\n".join(lines)
+
+    L = ["# Survey merge report", ""]
+    L.append("Generated %s. Field sheet `%s`, survey files: %s." % (
+        dt.date.today().isoformat(), os.path.basename(master), ", ".join("`%s`" % s for s in sources)))
+    L.append("")
+    L.append("**Nothing in the app has changed.** The merged sheet is a copy: check the coloured cells, "
+             "fix anything wrong, make it the field sheet, then run the import as usual.")
+    L.append("")
+    L.append(table(["", "count"], [
+        ["changes applied (yellow)", len(facts["applied"])],
+        ["new shops added (green, at the bottom)", len(facts["added"])],
+        ["**conflicts, left for a person**", "**%d**" % len(facts["conflicts"])],
+        ["shops not found in the sheet", len(facts["missing"])],
+        ["already in the sheet, nothing to do", len(facts["already"]) + len(facts["already_added"])],
+        ["unreadable", len(facts["unreadable"])],
+    ]))
+    L.append("")
+    sections = [
+        ("Conflicts: the sheet changed since the surveyor saw it",
+         "Nothing was written. Decide which value is right and fix the cell by hand.",
+         ["row", "shop", "column", "sheet says now", "surveyor saw", "surveyor wrote", "file"], facts["conflicts"]),
+        ("Shops not found in the sheet",
+         "Renamed, moved or deleted since the app's list was made. Find them by hand.",
+         ["shop", "id", "column", "surveyor wrote", "file"], facts["missing"]),
+        ("Matched by name, not id",
+         "The id was not in the sheet (usually a pin moved earlier), but exactly one row has this name. Check it is the same shop.",
+         ["row", "shop", "id in the survey"], facts["by_name"]),
+        ("Applied", "", ["row", "shop", "column", "was", "now"], facts["applied"]),
+        ("New shops added", "", ["row", "name"], facts["added"]),
+        ("Unreadable", "", ["row", "shop", "column", "value"], facts["unreadable"]),
+    ]
+    for title, note, head, body in sections:
+        L.append("## " + title)
+        L.append("")
+        if note:
+            L.append(note)
+            L.append("")
+        L.append(table(head, body) if body else "_none_")
+        L.append("")
+    L.append("## Problems in the rows the survey touched")
+    L.append("")
+    L.append("The same checks the import runs, limited to changed and added rows.")
+    L.append("")
+    L.append(table(["kind", "row", "detail"], checks) if checks else "_none_")
+    L.append("")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(L))
+
+
+def survey_checks(rows, touched):
+    """The import's own checks, kept to the rows the survey wrote."""
+    _, facts = build(rows)
+    out = []
+    out += [("skipped: " + why, n, name) for n, why, name in facts["skipped"] if n in touched]
+    out += [("phone not readable", n, "%s: %s" % (name, piece)) for n, name, piece in facts["bad_phones"] if n in touched]
+    out += [("possible duplicate", a["_row"], "%s / row %d %s (%d m)" % (a["name"], b["_row"], b["name"], d))
+            for d, a, b in facts["duplicates"] if a["_row"] in touched or b["_row"] in touched]
+    out += [("city unclear", n, "%s: %s" % (name, why)) for n, name, _, _, why in facts["city_unclear"] if n in touched]
+    out += [("Day Closed not readable", n, "%s: %s" % (name, v)) for n, name, v in facts["odd_closed"] if n in touched]
+    return out
+
+
+def merge_survey(master, sheet, paths):
+    import openpyxl
+
+    wb = openpyxl.load_workbook(master)
+    ws = wb[sheet] if sheet in wb.sheetnames else wb.worksheets[0]
+    if any(c.data_type == "f" for r in ws.iter_rows() for c in r):
+        sys.exit("The sheet has formulas; merging would read them as text. Paste them as values first.")
+    rows = read_rows(ws)
+    surveys = [(os.path.basename(p),) + read_survey(p) for p in paths]
+    writes, appends, facts, merged = plan_survey(rows, surveys)
+    write_survey(ws, writes, appends)
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(master))[0]
+    out = os.path.join(OUT_DIR, "%s (survey merged %s).xlsx" % (stem, dt.date.today().isoformat()))
+    wb.save(out)
+    touched = {n for n, *_ in writes} | {n for n, _ in facts["added"]}
+    write_survey_report(SURVEY_REPORT, master, [s[0] for s in surveys], facts, survey_checks(merged, touched))
+
+    print("%d applied, %d new shops, %d conflicts, %d not found, %d already in the sheet" % (
+        len(facts["applied"]), len(facts["added"]), len(facts["conflicts"]), len(facts["missing"]),
+        len(facts["already"]) + len(facts["already_added"])))
+    print("merged sheet  %s" % out)
+    print("report        %s" % SURVEY_REPORT)
+    print("Nothing in the app changed. Check the coloured cells, make the merged copy the field sheet,")
+    print("then run the import as usual.")
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -683,7 +1085,18 @@ def main():
     ap.add_argument("--sheet", default=DEFAULT_SHEET)
     ap.add_argument("--collected-at", help="YYYY-MM-DD. Defaults to the day the spreadsheet was last saved.")
     ap.add_argument("--apply", action="store_true", help="Copy the reviewed candidate into the app. Nothing else.")
+    ap.add_argument("--survey", nargs="+", metavar="FILE",
+                    help="App survey export(s) to merge into a copy of the sheet. Touches nothing else.")
     args = ap.parse_args()
+
+    if args.survey:
+        if args.apply:
+            sys.exit("--survey and --apply cannot run together: a person checks the merged sheet first.")
+        for path in [args.xlsx] + args.survey:
+            if not os.path.exists(path):
+                sys.exit("Cannot find: %s" % path)
+        merge_survey(args.xlsx, args.sheet, args.survey)
+        return
 
     if args.apply:
         if not os.path.exists(CANDIDATE):
