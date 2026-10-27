@@ -234,6 +234,10 @@ export default function SettingsScreen() {
             <Text style={s.buildLine}>
               Fixes accepted {gate.debug.accepted} · rejected as worse {gate.debug.rejected}
             </Text>
+            {/* Why the live watch failed, word for word. Blank while it runs. */}
+            <Text style={s.buildLine} selectable>
+              Watch {gate.debug.watchError ? `FAILED: ${gate.debug.watchError}` : gate.status === 'ready' ? 'running' : '—'}
+            </Text>
             {/*
               COMPARE WITH GOOGLE MAPS. If these numbers match Google's within about 10 m but
               the dots sit in different places, the two MAPS draw the street differently;

@@ -140,6 +140,33 @@ export function AccuracyBanner({
  * Not pressable: there is nothing for the rider to do but wait, and the list, search and
  * numbers all work meanwhile.
  */
+/**
+ * Location is on and allowed, the search has had its 15 s, and there is still no LIVE
+ * reading (nothing at all, or only the faded "last known" spot). Before this banner the
+ * app said nothing in this state, and riders concluded it was broken on their phone.
+ * "Improve" offers Android's network-assisted location, which gets a fix indoors where the
+ * GPS alone cannot; it is an offer, not a requirement.
+ */
+export function NoFixBanner({ onPress }: { onPress: () => void }) {
+  const { theme, t } = useSettings();
+  const s = styles(theme);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={s.banner}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={`${t.noFixYet}. Tap to improve.`}
+    >
+      <View style={[s.dot, { backgroundColor: theme.star }]} />
+      <Text style={s.bannerText} numberOfLines={1}>
+        {t.noFixYet}
+      </Text>
+      <Text style={s.bannerCta}>Improve</Text>
+    </Pressable>
+  );
+}
+
 export function FindingBanner() {
   const { theme, t } = useSettings();
   const s = styles(theme);

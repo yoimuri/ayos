@@ -171,6 +171,9 @@ Built, not yet checked on the test phone:
 - Shop ahead alerts: while riding, a banner and a short buzz when an open shop is within
   150 m ahead, on whichever side; several at once become one alert. Can be switched off
 - The screen stays on while riding
+- Location works with the phone's network-assisted location ("Google Location Accuracy")
+  switched off, as Google Maps does. If no live reading arrives, a banner says so and the
+  last known position (up to 30 minutes old) is shown faded instead of an empty map
 
 Not built yet:
 

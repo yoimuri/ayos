@@ -59,6 +59,11 @@ export type LocationDebug = {
   raw: [number, number] | null;
   /** Speed the phone reported with that reading, metres per second. */
   speed: number | null;
+  /**
+   * Why the live position watch failed, exactly as the OS said it, or null while it is
+   * running. The one line that tells "location is on but Ayos gets nothing" apart.
+   */
+  watchError: string | null;
 };
 
 export type LocationGate = {
@@ -139,6 +144,9 @@ export type LocationGate = {
   recheck: () => Promise<void>;
 };
 
+/** How long to wait before each retry of a failed position watch. */
+const WATCH_RETRY_MS = [3000, 10_000];
+
 function useLocationGateState(): LocationGate {
   const [status, setStatus] = useState<LocationStatus>('checking');
   const [position, setPosition] = useState<[number, number] | null>(null);
@@ -157,6 +165,7 @@ function useLocationGateState(): LocationGate {
     accepted: 0,
     raw: null,
     speed: null,
+    watchError: null,
   });
   const [precise, setPrecise] = useState<boolean | null>(null);
   /** The fix currently on screen, so a worse one can be refused. */
@@ -175,9 +184,12 @@ function useLocationGateState(): LocationGate {
   const lastCourseAt = useRef<number | null>(null);
   const watching = useRef<Location.LocationSubscription | null>(null);
   const compass = useRef<Location.LocationSubscription | null>(null);
+  /** Bumped by every stop, so a retry scheduled for an earlier watch never starts a second one. */
+  const watchGeneration = useRef(0);
   const mounted = useRef(true);
 
   const stopWatching = () => {
+    watchGeneration.current += 1;
     if (settleTimer.current) clearTimeout(settleTimer.current);
     settleTimer.current = null;
     watching.current?.remove();
@@ -200,12 +212,17 @@ function useLocationGateState(): LocationGate {
     try {
       /*
         BOUNDED, both ways. Unqualified, this returns whatever fix the phone last stored,
-        which can be hours old and a city away — and the app would draw it confidently as
-        "you". Five minutes and 500 metres is the widest that is still worth showing while
-        a real fix arrives. Outside that, nothing is the honest answer.
+        which can be hours old and a city away, and the app would draw it as "you".
+
+        Thirty minutes, not five. Indoors, with the phone's network-assisted location
+        switched off, the GPS alone can take minutes or never get a fix, and five minutes
+        left those riders with an empty map while Google Maps showed them a position. The
+        remembered spot is drawn FADED (`stale`) and the "can't read your location yet"
+        banner says so, so it is never mistaken for a live reading; the first real fix
+        replaces it.
       */
       const last = await Location.getLastKnownPositionAsync({
-        maxAge: 5 * 60 * 1000,
+        maxAge: 30 * 60 * 1000,
         requiredAccuracy: 500,
       });
       if (last && mounted.current) {
@@ -232,7 +249,8 @@ function useLocationGateState(): LocationGate {
     */
     setSettled(false);
     settleTimer.current = setTimeout(() => mounted.current && setSettled(true), SETTLE_TIMEOUT_MS);
-    try {
+    const generation = watchGeneration.current;
+    const startWatch = async () => {
       watching.current = await Location.watchPositionAsync(
         {
           /*
@@ -262,6 +280,16 @@ function useLocationGateState(): LocationGate {
             a still phone from redrawing for noise.
           */
           timeInterval: 1000,
+          /*
+            NO SETTINGS POP-UP, AND THAT IS THE FIX FOR "LOCATION IS ON BUT AYOS GETS
+            NOTHING". With this left at its default, expo-location (LocationModule.kt,
+            watchPositionImplAsync) first checks Android's network-assisted location
+            ("Google Location Accuracy"). When a rider has that switched off, it shows a
+            dialog asking them to turn it on, and if they decline, it gives up and never
+            starts the watch. Google Maps and Waze use the GPS without it, which is why they
+            kept working. False asks for the GPS directly, whatever that switch says.
+          */
+          mayShowUserSettingsDialog: false,
         },
         (p) => {
           if (!mounted.current) return;
@@ -346,10 +374,33 @@ function useLocationGateState(): LocationGate {
             accepted: counts.current.accepted,
           }));
         },
+        /* Errors after the watch started (the provider going unavailable) are recorded too. */
+        (reason) => {
+          if (mounted.current) setDebug((d) => ({ ...d, watchError: String(reason) }));
+        },
       );
-    } catch {
-      /* Watching can fail if the switch goes off between the check and the call. */
-    }
+    };
+    /*
+      NEVER GIVE UP SILENTLY. This used to be one try with an empty catch, so any failure
+      left the rider with no position, no message and no retry. Now a failure is recorded
+      (Settings -> Build info) and the watch is tried again after 3 s and then 10 s. A
+      newer search (recheck, returning to the app) cancels the retries via `generation`.
+    */
+    const attempt = async (n: number): Promise<void> => {
+      try {
+        await startWatch();
+        if (mounted.current) setDebug((d) => ({ ...d, watchError: null }));
+      } catch (e) {
+        if (!mounted.current) return;
+        setDebug((d) => ({ ...d, watchError: e instanceof Error ? e.message : String(e) }));
+        const wait = WATCH_RETRY_MS[n];
+        if (wait === undefined) return;
+        setTimeout(() => {
+          if (mounted.current && generation === watchGeneration.current && !watching.current) void attempt(n + 1);
+        }, wait);
+      }
+    };
+    await attempt(0);
 
     /*
       The compass, separately from position.
@@ -450,7 +501,11 @@ function useLocationGateState(): LocationGate {
    */
   const refresh = useCallback(async () => {
     try {
-      const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const p = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        /* Same reason as the watch: never depend on the network-location switch. */
+        mayShowUserSettingsDialog: false,
+      });
       if (!mounted.current) return;
       /*
         SAME SAFEGUARDS AS EVERY OTHER READING. This used to skip the gate, wipe the

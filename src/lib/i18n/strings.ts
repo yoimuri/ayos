@@ -161,6 +161,8 @@ export type Strings = {
   /** Distance and side alone, for the list under a grouped alert: "120 m on your left". */
   aheadWhere: (metres: number, side: 'left' | 'right' | 'ahead') => string;
   dismiss: string;
+  /** Location is on but no live reading has arrived. */
+  noFixYet: string;
 
   // Tutorial
   tourList: string;
@@ -315,6 +317,7 @@ const en: Strings = {
   shopsAheadMany: (n, m) => `${n} shops ahead within ${m} m`,
   aheadWhere: (m, side) => (side === 'ahead' ? `${m} m ahead` : `${m} m on your ${side}`),
   dismiss: 'Dismiss',
+  noFixYet: "Can't read your location yet",
 
   tourList: 'These are the shops nearest to you. Tap one to see it.',
   tourActions: 'From here you can call the shop, text them, or get directions.',
@@ -471,6 +474,7 @@ const tl: Strings = {
   shopsAheadMany: (n, m) => `${n} shop sa unahan, within ${m} m`,
   aheadWhere: (m, side) => `${m} m sa ${side === 'ahead' ? 'unahan' : side === 'left' ? 'kaliwa' : 'kanan'}`,
   dismiss: 'Isara',
+  noFixYet: 'Hindi pa mabasa ang location mo',
 
   tourList: "Ito ang mga shop na pinakamalapit sa'yo. Pindutin ang isa para makita.",
   tourActions: 'Dito ka puwedeng tumawag, mag-text, o humanap ng daan papunta sa shop.',

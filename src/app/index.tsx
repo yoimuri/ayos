@@ -26,6 +26,7 @@ import { SurveyPrompt } from '@/components/SurveyPrompt';
 import {
   AccuracyBanner,
   FindingBanner,
+  NoFixBanner,
   LocationBanner,
   LocationCard,
   PreciseBanner,
@@ -747,9 +748,18 @@ export default function HomeScreen() {
           <PreciseBanner onPress={gate.openSettings} />
         )}
         {gate.precise !== false && gate.finding && <FindingBanner />}
+        {/*
+          Searched, and still no LIVE reading: say so, rather than leaving an empty map or a
+          faded remembered spot to speak for itself.
+        */}
+        {gate.precise !== false && !gate.finding && gate.status === 'ready' && (!gate.position || gate.stale) && (
+          <NoFixBanner onPress={() => void gate.improveAccuracy()} />
+        )}
         {gate.precise !== false &&
           !gate.finding &&
           gate.status === 'ready' &&
+          gate.position &&
+          !gate.stale &&
           gate.accuracyM !== null &&
           gate.accuracyM > 50 && (
             <AccuracyBanner accuracyM={gate.accuracyM} onPress={() => void gate.improveAccuracy()} />
