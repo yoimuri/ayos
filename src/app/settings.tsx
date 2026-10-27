@@ -132,6 +132,12 @@ export default function SettingsScreen() {
           />
         </Group>
 
+        {/* A heads-up while riding when a shop is just ahead. On unless switched off. */}
+        <Group title={t.shopAlerts} summary={settings.shopAlerts ? 'On' : 'Off'}>
+          <Option label="On" selected={settings.shopAlerts} onPress={() => update({ shopAlerts: true })} />
+          <Option label="Off" selected={!settings.shopAlerts} onPress={() => update({ shopAlerts: false })} />
+        </Group>
+
         <Group title={t.about}>
           <Pressable onPress={() => setAboutOpen(true)} style={s.option} accessibilityRole="button">
             <Text style={s.optionLabel}>{t.about}</Text>

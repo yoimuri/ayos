@@ -346,7 +346,17 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
 
       <ReviewList reviews={shop.ratings} />
 
-      <Pressable onPress={onRate} style={s.rateCta} accessibilityRole="button">
+      {/*
+        RATE THIS SHOP, as a real button: filled, in the action colour, with a star. The
+        old dashed outline read as a placeholder or a disabled control, and riders passed
+        it by.
+      */}
+      <Pressable
+        onPress={onRate}
+        style={({ pressed }) => [s.rateCta, pressed && s.pressed]}
+        accessibilityRole="button"
+      >
+        <Text style={s.rateCtaStar}>★</Text>
         <Text style={s.rateCtaText}>{t.rateThisShop}</Text>
       </Pressable>
 
@@ -514,14 +524,15 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     },
 
     rateCta: {
-      height: 54,
-      borderRadius: 12,
-      borderWidth: 2,
-      borderStyle: 'dashed',
-      borderColor: theme.line,
+      height: 56,
+      borderRadius: 14,
+      backgroundColor: theme.call,
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 10,
       marginTop: 4,
     },
-    rateCtaText: { fontSize: 15, fontWeight: '600', color: theme.ink2 },
+    rateCtaStar: { fontSize: 22, color: theme.onFilled, lineHeight: 26 },
+    rateCtaText: { fontSize: 17, fontWeight: '700', color: theme.onFilled },
   });

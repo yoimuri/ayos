@@ -28,7 +28,7 @@ import { useTour, useTourTarget } from '@/components/Tour';
 
 import type { Shop } from '@/lib/data/types';
 import { DETOUR_FACTOR } from '@/lib/geo/distance';
-import { busyUntil, shouldFollow } from '@/lib/map/follow';
+import { bearingFor, busyUntil, checkResume, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
 import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
 
 /**
@@ -264,6 +264,7 @@ export function RealMap({
   recentre: recentreSignal = 0,
   /** Degrees clockwise from north, already smoothed. Null hides the bike's direction. */
   heading = null,
+  course = null,
   /**
    * How many pixels at the BOTTOM of the map are hidden behind the shop sheet.
    *
@@ -293,6 +294,8 @@ export function RealMap({
   frame?: { bounds: [number, number, number, number]; nonce: number } | null;
   recentre?: number;
   heading?: number | null;
+  /** Direction of travel while moving, else null (see useLocationGate). Turns the map. */
+  course?: number | null;
   obscuredBottom?: number;
   mapHidden?: boolean;
 }) {
@@ -315,6 +318,20 @@ export function RealMap({
    * A ref, not state: nothing on screen is drawn from it, so changing it must not re-render.
    */
   const following = useRef(true);
+  /** While not following: when the map was last touched and which way the rider was going. */
+  const pause = useRef<Pause | null>(null);
+  /** The last time the rider was moving, and the map's current turn, for `bearingFor`. */
+  const lastMovingAt = useRef<number | null>(null);
+  const bearingNow = useRef(0);
+  /** Stop following for now; it comes back by itself (lib/map/follow.ts). */
+  const pauseFollow = () => {
+    following.current = false;
+    pause.current = pauseAt(Date.now(), course);
+  };
+  const resumeFollow = () => {
+    following.current = true;
+    pause.current = null;
+  };
   /** The map's current zoom, kept from its own events so "zoom to me" never zooms OUT. */
   const zoomNow = useRef(12);
   /**
@@ -344,17 +361,22 @@ export function RealMap({
   */
   useEffect(() => {
     if (!rider || !everLoaded || !openedOnRider.current) return;
-    if (
-      !shouldFollow({
-        following: following.current,
-        hasFocus: !!focus,
-        busyUntil: flyingUntil.current,
-        now: Date.now(),
-      })
-    ) {
-      return;
+    const now = Date.now();
+    if (course !== null) lastMovingAt.current = now;
+    /* Paused: does this reading bring following back (a turn, or a while untouched)? */
+    if (!following.current && pause.current) {
+      const r = checkResume(pause.current, course, now);
+      pause.current = r.pause;
+      if (r.resume) resumeFollow();
     }
-    camera.current?.easeTo({ center: rider, duration: 900 });
+    if (!shouldFollow({ following: following.current, busyUntil: flyingUntil.current, now })) return;
+    /*
+      ROAD AHEAD UP while moving (see bearingFor). Linear, and as long as the glide of the
+      rider's dot, so the two move together and the dot stays put on screen.
+    */
+    const bearing = bearingFor({ course, lastMovingAt: lastMovingAt.current, now, current: bearingNow.current });
+    bearingNow.current = bearing;
+    camera.current?.easeTo({ center: rider, bearing, duration: 900, easing: 'linear' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rider]);
 
@@ -383,6 +405,8 @@ export function RealMap({
   useEffect(() => {
     if (!focus || !everLoaded) return;
     const shop: [number, number] = [focus.shop.lng, focus.shop.lat];
+    /* Looking at a shop pauses following; riding on brings it back (lib/map/follow.ts). */
+    pauseFollow();
 
     if (!rider) {
       fly(700);
@@ -432,7 +456,7 @@ export function RealMap({
   /* An outside request to go back to the rider. Ignored on first render. */
   useEffect(() => {
     if (recentreSignal === 0 || !rider || !everLoaded) return;
-    following.current = true;
+    resumeFollow();
     /* Same rule as the button: go there, change nothing else. */
     fly(700);
     camera.current?.flyTo({ center: rider, duration: 700 });
@@ -442,8 +466,8 @@ export function RealMap({
   /* Go to the city the rider just picked, framed so the whole of it is visible. */
   useEffect(() => {
     if (!frame || !everLoaded) return;
-    /* The rider asked to look at a city, so the camera stops chasing them. */
-    following.current = false;
+    /* The rider asked to look at a city, so the camera stops chasing them, for now. */
+    pauseFollow();
     fly(800);
     camera.current?.fitBounds(frame.bounds, {
       padding: { top: 70, left: 50, right: 50, bottom: Math.max(80, obscuredBottom * 0.25) },
@@ -464,7 +488,7 @@ export function RealMap({
     */
     fly(700);
     camera.current?.flyTo({ center: rider, duration: 700 });
-    following.current = true;
+    resumeFollow();
     /*
       And ask for a fresh reading while the camera is moving. The rider pressing this is
       asking where they actually are, not merely to be shown the last answer again.
@@ -501,25 +525,6 @@ export function RealMap({
   }, [shops, visited]);
 
   const byId = useMemo(() => new Map(shops.map((shop) => [shop.id, shop])), [shops]);
-
-  /*
-    MEMOISED, for the same reason the images are. Everything below is handed straight to
-    a native component, and a native component re-reads a prop whose identity changed
-    even when the values inside are the same. Built inline they were rebuilt on every
-    render — which, now that heading is state, means roughly ten times a second while the
-    rider turns.
-  */
-  const riderFeature = useMemo(
-    () =>
-      rider
-        ? ({
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'Point', coordinates: rider },
-          } as GeoJSON.Feature)
-        : null,
-    [rider],
-  );
 
   const focusFeature = useMemo(
     () =>
@@ -572,8 +577,8 @@ export function RealMap({
         overshoots past the shops the rider was reaching for.
       */
       const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
-      /* Opening a cluster is exploring, like dragging: stop chasing the rider. */
-      following.current = false;
+      /* Opening a cluster is exploring, like dragging: stop chasing the rider, for now. */
+      pauseFollow();
       source.current
         ?.getClusterExpansionZoom(props.cluster_id as number)
         .then((zoom) => camera.current?.flyTo({ center: coords, zoom, duration: 600 }))
@@ -593,7 +598,7 @@ export function RealMap({
   */
   const zoomToMe = () => {
     if (!rider) return;
-    following.current = true;
+    resumeFollow();
     fly(800);
     camera.current?.flyTo({ center: rider, zoom: Math.max(zoomNow.current, MEET_ZOOM), duration: 800 });
     onRecentre?.();
@@ -614,18 +619,11 @@ export function RealMap({
         attribution={false}
         logo={false}
         /*
-          NORTH IS ALWAYS UP, and that is load-bearing for the heading cone.
-
-          Markers are view annotations: they sit on top of the map and do NOT turn with
-          it. If the rider could rotate the map, the cone would keep pointing at screen
-          north while the streets underneath turned, and it would be silently wrong by
-          exactly the map's bearing. Locking rotation makes the cone correct by
-          construction instead of by arithmetic that has to be kept in sync.
-
-          North-up is also the right default for a shop finder. This is not turn-by-turn
-          navigation; the rider is scanning what is around them, and a map that spins
-          while they turn makes that harder, not easier. The compass control goes with
-          it — a compass that can only ever read north is furniture.
+          NO TWISTING WITH TWO FINGERS. The app turns the map itself: road ahead up while
+          following a moving rider, back to north once they have been stopped a while
+          (lib/map/follow.ts). A rider who twisted it by accident would have no way to
+          straighten it. The rider's arrow and cone are symbol layers aligned to the MAP,
+          so they stay correct whichever way the map is turned.
         */
         touchRotate={false}
         /*
@@ -637,13 +635,18 @@ export function RealMap({
         onDidFinishLoadingMap={() => setEverLoaded(true)}
         /*
           `userInteraction` is true only when a finger moved the map, never for our own
-          camera moves, so following stops exactly when the rider takes over.
+          camera moves, so following pauses exactly when the rider takes over, and every
+          further touch restarts the wait before it comes back.
         */
         onRegionWillChange={(e) => {
-          if (e.nativeEvent.userInteraction) following.current = false;
+          if (!e.nativeEvent.userInteraction) return;
+          if (following.current || !pause.current) pauseFollow();
+          else pause.current = { ...pause.current, lastTouchAt: Date.now() };
         }}
         onRegionDidChange={(e) => {
           zoomNow.current = e.nativeEvent.zoom;
+          bearingNow.current = e.nativeEvent.bearing;
+          if (e.nativeEvent.userInteraction && pause.current) pause.current = { ...pause.current, lastTouchAt: Date.now() };
         }}
         /* A style that will not load leaves the spinner forever otherwise. */
         onDidFailLoadingMap={() => setFailed(true)}
@@ -937,91 +940,12 @@ export function RealMap({
           keeps its size as the rider zooms — which a geographic circle would not.
         */}
 
-        {rider && (
-          <GeoJSONSource id="rider" data={riderFeature!}>
-            {/*
-              The glow, as five stacked circles. React Native cannot blur a shape and
-              neither can a style layer, so a soft edge is built by accumulating faint
-              ones. Fewer, larger steps band into visible rings instead of glowing.
-            */}
-            {AURA.map(({ size: ring, opacity }) => (
-              <Layer
-                key={ring}
-                id={`rider-aura-${ring}`}
-                type="circle"
-                paint={{
-                  'circle-radius': ring / 2,
-                  'circle-color': mapTheme.accent,
-                  'circle-opacity': riderLive ? opacity : opacity * 0.45,
-                }}
-              />
-            ))}
-
-            {/* Which way the phone is pointing. Absent entirely until the compass reports. */}
-            {heading !== null && (
-              <Layer
-              key="rider-cone"
-              id="rider-cone"
-                type="symbol"
-                layout={{
-                  'icon-image': 'rider-cone',
-                  'icon-size': 0.42,
-                  'icon-rotate': heading,
-                  'icon-rotation-alignment': 'map',
-                  'icon-allow-overlap': true,
-                  'icon-ignore-placement': true,
-                }}
-                paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 0.26 : 0.12 }}
-              />
-            )}
-
-
-            <Layer
-              key="rider-moto"
-              id="rider-moto"
-              type="symbol"
-              layout={{
-                'icon-image': 'rider-moto',
-                'icon-size': RIDER_SIZE,
-                /*
-                  Points north until the compass reports. A motorcycle has to point
-                  somewhere, and north is the one direction that is not a claim.
-                */
-                'icon-rotate': heading ?? 0,
-                'icon-rotation-alignment': 'map',
-                'icon-allow-overlap': true,
-                'icon-ignore-placement': true,
-              }}
-              paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 1 : 0.5 }}
-            />
-
-            {/*
-              THE RIDER, PICKED OUT OF THE MACHINE.
-
-              One flat silhouette made the helmet and shoulders merge into the tank, so it
-              read as a shape rather than a person on a bike. A second image in the light
-              colour — a ring around the helmet and a line under the shoulders — separates
-              them without adding a third colour to the map.
-
-              Same size and same rotation as the bike, from the same constants, because
-              two images stacked on each other must agree exactly or the helmet drifts.
-            */}
-            <Layer
-              key="rider-detail"
-              id="rider-detail"
-              type="symbol"
-              layout={{
-                'icon-image': 'rider-detail',
-                'icon-size': RIDER_SIZE,
-                'icon-rotate': heading ?? 0,
-                'icon-rotation-alignment': 'map',
-                'icon-allow-overlap': true,
-                'icon-ignore-placement': true,
-              }}
-              paint={{ 'icon-color': mapTheme.onFilled, 'icon-opacity': riderLive ? 1 : 0.5 }}
-            />
-          </GeoJSONSource>
-        )}
+        {/*
+          THE RIDER, drawn by its own component so that gliding it between readings
+          (several redraws a second while riding) redraws only the rider, not the whole
+          map with its two thousand shops.
+        */}
+        <RiderMark rider={rider} heading={heading} riderLive={riderLive} glide={course != null} />
 
       </MapView>
 
@@ -1195,3 +1119,156 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       opacity: 0.8,
     },
   });
+
+/**
+ * GLIDING BETWEEN READINGS. The GPS reports about once a second; drawing each reading as
+ * it lands makes a moving bike hop. While the rider moves (`on`), the drawn point slides
+ * from where it is to the new reading over the next second, in step with the camera,
+ * which eases there over the same time. Stopped, it simply jumps: nothing is moving.
+ */
+const GLIDE_MS = 900;
+const GLIDE_FRAME_MS = 60;
+
+function useGlide(target: [number, number] | null, on: boolean): [number, number] | null {
+  const [drawn, setDrawn] = useState<[number, number] | null>(target);
+  const from = useRef<[number, number] | null>(target);
+  useEffect(() => {
+    if (!target) return;
+    let frame = 0;
+    if (!on || !from.current) {
+      frame = requestAnimationFrame(() => {
+        from.current = target;
+        setDrawn(target);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    const start = from.current;
+    const t0 = Date.now();
+    let last = 0;
+    const tick = () => {
+      const k = Math.min(1, (Date.now() - t0) / GLIDE_MS);
+      const p: [number, number] = [start[0] + (target[0] - start[0]) * k, start[1] + (target[1] - start[1]) * k];
+      from.current = p;
+      if (k === 1 || Date.now() - last >= GLIDE_FRAME_MS) {
+        last = Date.now();
+        setDrawn(p);
+      }
+      if (k < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, on]);
+  return target ? (drawn ?? target) : null;
+}
+
+function RiderMark({
+  rider,
+  heading,
+  riderLive,
+  glide,
+}: {
+  rider: [number, number] | null;
+  heading: number | null;
+  riderLive: boolean;
+  glide: boolean;
+}) {
+  const { mapTheme } = useSettings();
+  const drawn = useGlide(rider, glide);
+  /*
+    MEMOISED: a native component re-reads a prop whose identity changed even when the
+    values are the same.
+  */
+  const feature = useMemo(
+    () =>
+      drawn
+        ? ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: drawn } } as GeoJSON.Feature)
+        : null,
+    [drawn],
+  );
+  if (!feature) return null;
+  return (
+      <GeoJSONSource id="rider" data={feature}>
+        {/*
+          The glow, as five stacked circles. React Native cannot blur a shape and
+          neither can a style layer, so a soft edge is built by accumulating faint
+          ones. Fewer, larger steps band into visible rings instead of glowing.
+        */}
+        {AURA.map(({ size: ring, opacity }) => (
+          <Layer
+            key={ring}
+            id={`rider-aura-${ring}`}
+            type="circle"
+            paint={{
+              'circle-radius': ring / 2,
+              'circle-color': mapTheme.accent,
+              'circle-opacity': riderLive ? opacity : opacity * 0.45,
+            }}
+          />
+        ))}
+
+        {/* Which way the phone is pointing. Absent entirely until the compass reports. */}
+        {heading !== null && (
+          <Layer
+          key="rider-cone"
+          id="rider-cone"
+            type="symbol"
+            layout={{
+              'icon-image': 'rider-cone',
+              'icon-size': 0.42,
+              'icon-rotate': heading,
+              'icon-rotation-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            }}
+            paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 0.26 : 0.12 }}
+          />
+        )}
+
+
+        <Layer
+          key="rider-moto"
+          id="rider-moto"
+          type="symbol"
+          layout={{
+            'icon-image': 'rider-moto',
+            'icon-size': RIDER_SIZE,
+            /*
+              Points north until the compass reports. A motorcycle has to point
+              somewhere, and north is the one direction that is not a claim.
+            */
+            'icon-rotate': heading ?? 0,
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+          }}
+          paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 1 : 0.5 }}
+        />
+
+        {/*
+          THE RIDER, PICKED OUT OF THE MACHINE.
+
+          One flat silhouette made the helmet and shoulders merge into the tank, so it
+          read as a shape rather than a person on a bike. A second image in the light
+          colour — a ring around the helmet and a line under the shoulders — separates
+          them without adding a third colour to the map.
+
+          Same size and same rotation as the bike, from the same constants, because
+          two images stacked on each other must agree exactly or the helmet drifts.
+        */}
+        <Layer
+          key="rider-detail"
+          id="rider-detail"
+          type="symbol"
+          layout={{
+            'icon-image': 'rider-detail',
+            'icon-size': RIDER_SIZE,
+            'icon-rotate': heading ?? 0,
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+          }}
+          paint={{ 'icon-color': mapTheme.onFilled, 'icon-opacity': riderLive ? 1 : 0.5 }}
+        />
+      </GeoJSONSource>
+  );
+}

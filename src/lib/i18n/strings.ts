@@ -152,6 +152,16 @@ export type Strings = {
   fieldMode: string;
   fieldModeInfo: string;
 
+  // Shop ahead alerts
+  shopAlerts: string;
+  /** One shop: "Shop ahead · 120 m on your left". */
+  shopAheadOne: (metres: number, side: 'left' | 'right' | 'ahead') => string;
+  /** Several: "4 shops ahead within 150 m". */
+  shopsAheadMany: (count: number, metres: number) => string;
+  /** Distance and side alone, for the list under a grouped alert: "120 m on your left". */
+  aheadWhere: (metres: number, side: 'left' | 'right' | 'ahead') => string;
+  dismiss: string;
+
   // Tutorial
   tourList: string;
   tourActions: string;
@@ -299,6 +309,12 @@ const en: Strings = {
   fieldMode: 'Field survey mode',
   fieldModeInfo:
     "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
+
+  shopAlerts: 'Shop ahead alerts',
+  shopAheadOne: (m, side) => (side === 'ahead' ? `Shop ahead · ${m} m` : `Shop ahead · ${m} m on your ${side}`),
+  shopsAheadMany: (n, m) => `${n} shops ahead within ${m} m`,
+  aheadWhere: (m, side) => (side === 'ahead' ? `${m} m ahead` : `${m} m on your ${side}`),
+  dismiss: 'Dismiss',
 
   tourList: 'These are the shops nearest to you. Tap one to see it.',
   tourActions: 'From here you can call the shop, text them, or get directions.',
@@ -448,6 +464,13 @@ const tl: Strings = {
   fieldMode: 'Field survey mode',
   fieldModeInfo:
     "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
+
+  shopAlerts: 'Alerto sa shop sa unahan',
+  shopAheadOne: (m, side) =>
+    side === 'ahead' ? `May shop sa unahan · ${m} m` : `May shop sa ${side === 'left' ? 'kaliwa' : 'kanan'} · ${m} m`,
+  shopsAheadMany: (n, m) => `${n} shop sa unahan, within ${m} m`,
+  aheadWhere: (m, side) => `${m} m sa ${side === 'ahead' ? 'unahan' : side === 'left' ? 'kaliwa' : 'kanan'}`,
+  dismiss: 'Isara',
 
   tourList: "Ito ang mga shop na pinakamalapit sa'yo. Pindutin ang isa para makita.",
   tourActions: 'Dito ka puwedeng tumawag, mag-text, o humanap ng daan papunta sa shop.',

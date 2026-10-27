@@ -10,9 +10,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Vibration,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandHeader, Wordmark } from '@/components/BrandBar';
@@ -30,6 +32,7 @@ import {
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
 import { RealMap } from '@/components/RealMap';
+import { ShopAheadBanner } from '@/components/ShopAhead';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
 import { useOnline } from '@/lib/net/useOnline';
 import { useLocationGate } from '@/lib/location/useLocationGate';
@@ -37,6 +40,7 @@ import { useAppShops } from '@/lib/data/shops';
 import { useExportReminder } from '@/lib/fieldwork/store';
 import { overall } from '@/lib/personal/model';
 import { usePersonal } from '@/lib/personal/store';
+import { NO_ALERTS, nextAlert, type AheadOf, type AlertMemory } from '@/lib/nearby/ahead';
 import type { Shop } from '@/lib/data/types';
 import { RADIUS_OPTIONS, shopsForArea, splitDistance } from '@/lib/geo/distance';
 import { AREA_CENTRES, AREA_LABELS, useSettings, type Area } from '@/lib/settings/store';
@@ -204,6 +208,49 @@ export default function HomeScreen() {
   const allShops = useAppShops(gate.position, settings.area);
   const personal = usePersonal();
   const exportDue = useExportReminder();
+
+  /*
+    SHOP AHEAD (lib/nearby/ahead.ts): a heads-up while riding when a shop is just ahead.
+    Checked once per GPS reading, during render rather than in an effect, so the banner
+    appears in the same frame as the position that triggered it. `seenFix` makes it run
+    once per reading; the reading's own timestamp is the clock, so the check is pure.
+  */
+  const [alertMemory, setAlertMemory] = useState<AlertMemory>(NO_ALERTS);
+  const [aheadBanner, setAheadBanner] = useState<{ items: AheadOf<Shop>[]; at: number } | null>(null);
+  const [seenFix, setSeenFix] = useState<number | null>(null);
+  if (gate.fixAt !== seenFix) {
+    setSeenFix(gate.fixAt);
+    if (settings.shopAlerts && gate.position && gate.fixAt !== null && gate.course !== null) {
+      const r = nextAlert(alertMemory, { rider: gate.position, course: gate.course, at: gate.fixAt, shops: allShops });
+      if (r.alert) {
+        setAlertMemory(r.memory);
+        setAheadBanner({ items: r.alert, at: gate.fixAt });
+      }
+    }
+  }
+  /* A short buzz with each new alert, and the banner goes by itself after 8 seconds. */
+  useEffect(() => {
+    if (!aheadBanner) return;
+    Vibration.vibrate(250);
+    const timer = setTimeout(() => setAheadBanner(null), 8000);
+    return () => clearTimeout(timer);
+  }, [aheadBanner]);
+
+  /*
+    THE SCREEN STAYS ON WHILE RIDING. A phone on a handlebar mount that sleeps after 30
+    seconds shows neither the map nor the alerts. On while moving, released two minutes
+    after the rider stops, so a parked phone still sleeps as normal.
+  */
+  const riding = gate.course !== null;
+  useEffect(() => {
+    if (riding) {
+      activateKeepAwakeAsync('riding').catch(() => {});
+      return;
+    }
+    const timer = setTimeout(() => deactivateKeepAwake('riding').catch(() => {}), 2 * 60_000);
+    return () => clearTimeout(timer);
+  }, [riding]);
+  useEffect(() => () => void deactivateKeepAwake('riding').catch(() => {}), []);
 
   /*
     OPENED FROM MY SHOPS: that screen comes back here with `open` set to a shop id and
@@ -665,6 +712,7 @@ export default function HomeScreen() {
             /* Tapping empty map is "never mind": it closes the open shop. */
             onClearFocus={closeShop}
             heading={gate.heading}
+            course={gate.course}
             /* Everything below the sheet's top edge is hidden, so controls sit above it. */
             obscuredBottom={stageH - sheetTop(sheetAt, stageH)}
             mapHidden={sheetAt === 'list'}
@@ -706,6 +754,17 @@ export default function HomeScreen() {
           gate.accuracyM > 50 && (
             <AccuracyBanner accuracyM={gate.accuracyM} onPress={() => void gate.improveAccuracy()} />
           )}
+
+        {aheadBanner && (
+          <ShopAheadBanner
+            items={aheadBanner.items}
+            onOpen={(shop) => {
+              setAheadBanner(null);
+              openFromTap(shop);
+            }}
+            onClose={() => setAheadBanner(null)}
+          />
+        )}
 
         {stageH > 0 && (
           <ShopSheet

@@ -5,7 +5,8 @@ import { AppState, Linking, Platform } from 'react-native';
 import { isBetterFix, type Fix } from './betterFix';
 import { createHeadingFilter } from './headingFilter';
 import { createPositionFilter } from './positionFilter';
-import { courseIfMoving, courseIsFresh } from './course';
+import { courseIsFresh } from './course';
+import { createMotion } from './motion';
 import { isGoodFix, SETTLE_TIMEOUT_MS } from './settle';
 
 /**
@@ -117,6 +118,17 @@ export type LocationGate = {
    * front of me". See course.ts.
    */
   heading: number | null;
+  /**
+   * The direction of travel, degrees from north, ONLY while the rider is clearly moving
+   * (above about 9 km/h); null otherwise. Taken from the GPS track, never the compass:
+   * a compass on a motorcycle reads the engine and the handlebars as much as north.
+   * This is what turns the map and decides which shops are "ahead".
+   */
+  course: number | null;
+  /** Metres per second, the phone's own figure when real, otherwise measured. Null when unknown. */
+  speedMps: number | null;
+  /** When the reading behind `position` was taken (ms since 1970), or null. */
+  fixAt: number | null;
   /** Ask the system for permission. Does nothing useful when blocked or services are off. */
   request: () => Promise<void>;
   /** Demand one fresh high-accuracy reading rather than waiting for the watch. */
@@ -154,6 +166,11 @@ function useLocationGateState(): LocationGate {
   const filter = useRef(createHeadingFilter());
   /* Averages fixes while the rider is still, and refuses to redraw for noise. */
   const posFilter = useRef(createPositionFilter());
+  /* Speed and direction, measured from the readings when the phone does not report them. */
+  const motion = useRef(createMotion());
+  const [course, setCourse] = useState<number | null>(null);
+  const [speedMps, setSpeedMps] = useState<number | null>(null);
+  const [fixAt, setFixAt] = useState<number | null>(null);
   /** When the GPS last gave a direction of travel. While recent, it beats the compass. */
   const lastCourseAt = useRef<number | null>(null);
   const watching = useRef<Location.LocationSubscription | null>(null);
@@ -169,7 +186,9 @@ function useLocationGateState(): LocationGate {
     compass.current = null;
     filter.current.reset();
     posFilter.current.reset();
+    motion.current.reset();
     setHeading(null);
+    setCourse(null);
   };
 
   const readPosition = useCallback(async (live: boolean) => {
@@ -253,11 +272,25 @@ function useLocationGateState(): LocationGate {
             below refuses: a slightly rough position still knows which way it is moving.
             See course.ts for why this beats the compass while the bike is moving.
           */
-          const course = courseIfMoving(p.coords.speed, p.coords.heading);
-          if (course !== null) {
+          const moved = motion.current.push({
+            lng: p.coords.longitude,
+            lat: p.coords.latitude,
+            accuracy: p.coords.accuracy ?? null,
+            timestamp: p.timestamp,
+            speed: p.coords.speed,
+            heading: p.coords.heading,
+          });
+          if (moved.course !== null) {
             lastCourseAt.current = Date.now();
-            setHeading(course);
+            setHeading(moved.course);
           }
+          /* Only redrawn for a real change: a degree or two of course is not news. */
+          setCourse((c) =>
+            moved.course === null || c === null || Math.abs(((moved.course - c + 540) % 360) - 180) >= 2
+              ? moved.course
+              : c,
+          );
+          setSpeedMps(moved.speed);
           const next: Fix = { accuracy: p.coords.accuracy ?? null, timestamp: p.timestamp };
 
           /*
@@ -287,9 +320,14 @@ function useLocationGateState(): LocationGate {
             lat: p.coords.latitude,
             accuracy: p.coords.accuracy ?? null,
             timestamp: p.timestamp,
-            speed: p.coords.speed,
+            /* Measured when the phone reports none (or a constant 0): see motion.ts. */
+            speed: moved.speed,
+            course: moved.course,
           });
-          if (fixed) setPosition([fixed.lng, fixed.lat]);
+          if (fixed) {
+            setPosition([fixed.lng, fixed.lat]);
+            setFixAt(p.timestamp);
+          }
           /*
             The PHONE's figure, not the filter's. Averaging makes the filter's own number
             look far better than the readings deserve when the error is the slow, shared
@@ -498,6 +536,9 @@ function useLocationGateState(): LocationGate {
     accuracyM,
     debug,
     heading,
+    course,
+    speedMps,
+    fixAt,
     request,
     refresh,
     improveAccuracy,

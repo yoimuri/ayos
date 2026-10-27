@@ -164,11 +164,20 @@ Built, not yet checked on the test phone:
   coordinates fill themselves in), keep every change in an editable log with the original
   always restorable, and export one spreadsheet (new shops, edited shops, every change)
   plus a backup. It is removed before release
+- Riding mode: the map follows the rider and turns so the road ahead points up, pauses
+  when the map is touched and comes back by itself on a turn or after 15 seconds, and the
+  dot glides between GPS readings. Speed and direction are measured from the readings on
+  phones that do not report them, which kept the dot up to 85 m behind on those phones
+- Shop ahead alerts: while riding, a banner and a short buzz when an open shop is within
+  150 m ahead, on whichever side; several at once become one alert. Can be switched off
+- The screen stays on while riding
 
 Not built yet:
 
 - A backend and database, so the shop list can be updated without a new app release
 - Saving ratings to a server (today a rating stays on the phone that gave it), legal pages
+- Shop ahead alerts with the app in the background (needs background location and a new
+  app build); road routes to a shop (Directions hands off to Google Maps)
 - Self-hosted map tiles (it uses OpenFreeMap's public tiles today)
 
 ---

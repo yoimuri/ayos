@@ -103,6 +103,8 @@ export type Settings = {
    * "Update shop info" form on every shop, "Add a shop", and the survey export.
    */
   fieldMode: boolean;
+  /** A heads-up while riding when a shop is just ahead (lib/nearby/ahead.ts). */
+  shopAlerts: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -118,6 +120,7 @@ const DEFAULTS: Settings = {
   surveyState: 'unasked',
   searchHidden: false,
   fieldMode: false,
+  shopAlerts: true,
 };
 
 /**

@@ -62,6 +62,14 @@
 export const MOVING_MPS = 2.5;
 /** Rule 3 applies only to readings at least this good: satellite-grade, not WiFi. */
 const MOVING_MAX_ACC_M = 30;
+/**
+ * ...or up to this, for phones whose GPS is simply worse, when the readings also keep
+ * one direction (within MOVING_SAME_WAY_DEG). A still phone's poor readings jump about in
+ * random directions; a bike's march one way. Without this, a phone reporting 40 m
+ * accuracy on the road lagged up to 58 m behind the rider.
+ */
+const MOVING_MAX_ACC_POOR_M = 50;
+const MOVING_SAME_WAY_DEG = 35;
 /** Fast readings in a row before rule 3 believes the phone is moving. */
 const MOVING_RUN = 3;
 /** ...and over those readings it must have covered at least this fraction of what the speed claims. */
@@ -109,6 +117,8 @@ export type Sample = {
   timestamp: number;
   /** Metres per second as the phone reports it, or null when unknown. */
   speed?: number | null;
+  /** Direction of travel in degrees from north, or null when unknown or not moving. */
+  course?: number | null;
 };
 
 export type Fixed = { lng: number; lat: number; accuracy: number };
@@ -140,6 +150,11 @@ const ASSUMED_ACCURACY_M = 50;
 const REDRAW_FACTOR = 0.6;
 
 /** Metres between two coordinates. Equirectangular; exact enough far below a kilometre. */
+/** Smallest difference between two bearings, 0-180. (Also in motion.ts; this file imports nothing.) */
+function angleBetween(a: number, b: number): number {
+  return Math.abs((((a - b) % 360) + 540) % 360 - 180);
+}
+
 export function metresBetween(a: { lng: number; lat: number }, b: { lng: number; lat: number }) {
   const mPerDegLat = 111_320;
   const mPerDegLng = 111_320 * Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180);
@@ -170,6 +185,8 @@ export function createPositionFilter(): PositionFilter {
   let fastRun: Sample[] = [];
   /** Consecutive readings above still speed, before the stopping spot is forgotten. */
   let walkRun = 0;
+  /** True while the last reading was drawn by rule 3, so the next can be predicted from it. */
+  let wasMoving = false;
 
   const acc = (s: Sample) => Math.max(MIN_ACCURACY_M, s.accuracy ?? ASSUMED_ACCURACY_M);
 
@@ -196,8 +213,40 @@ export function createPositionFilter(): PositionFilter {
     return { lng: lng / wSum, lat: lat / wSum, accuracy: Math.sqrt(1 / wSum) };
   }
 
+  /*
+    RIDING SMOOTHLY. Drawing each moving reading raw makes the dot step sideways by the
+    reading's noise every second. Instead, predict where the bike should be now from the
+    last drawn spot, its speed and its direction, and move only part of the way from that
+    prediction toward the reading: most of the way when the reading is sharp, less when it
+    is vague. A real turn or a big correction shows up as a large gap, and then the dot
+    goes nearly all the way, so it never trails a turning rider.
+  */
+  let lastShownAt = 0;
+  function steer(prev: Fixed | null, s: Sample, a: number): Fixed {
+    const dt = (s.timestamp - lastShownAt) / 1000;
+    lastShownAt = s.timestamp;
+    if (!prev || !wasMoving || s.course == null || s.speed == null || dt <= 0 || dt > 5) {
+      return { lng: s.lng, lat: s.lat, accuracy: a };
+    }
+    const step = s.speed * dt;
+    const rad = (s.course * Math.PI) / 180;
+    const mPerDegLng = 111_320 * Math.cos((prev.lat * Math.PI) / 180);
+    const predicted = {
+      lng: prev.lng + (step * Math.sin(rad)) / mPerDegLng,
+      lat: prev.lat + (step * Math.cos(rad)) / 111_320,
+    };
+    const gap = metresBetween(predicted, s);
+    const k = gap > 3 * a ? 0.85 : Math.min(0.75, Math.max(0.3, 10 / a));
+    return {
+      lng: predicted.lng + k * (s.lng - predicted.lng),
+      lat: predicted.lat + k * (s.lat - predicted.lat),
+      accuracy: a,
+    };
+  }
+
   return {
     reset() {
+      lastShownAt = 0;
       window = [];
       disagreeRun = 0;
       shown = null;
@@ -206,6 +255,7 @@ export function createPositionFilter(): PositionFilter {
       heldBack = [];
       fastRun = [];
       walkRun = 0;
+      wasMoving = false;
     },
 
     push(s) {
@@ -215,7 +265,7 @@ export function createPositionFilter(): PositionFilter {
         Rule 3: moving. Collect fast readings; once three in a row have actually covered
         ground, draw each one as it arrives, until the speed drops again.
       */
-      const fast = s.speed != null && s.speed >= MOVING_MPS && a <= MOVING_MAX_ACC_M;
+      const fast = s.speed != null && s.speed >= MOVING_MPS && a <= MOVING_MAX_ACC_POOR_M;
       if (fast) {
         fastRun.push(s);
         if (fastRun.length > MOVING_RUN) fastRun.shift();
@@ -226,16 +276,21 @@ export function createPositionFilter(): PositionFilter {
       const claimed = fastRun.length === MOVING_RUN
         ? fastRun.slice(1).reduce((sum, r, i) => sum + (r.speed ?? 0) * ((r.timestamp - fastRun[i].timestamp) / 1000), 0)
         : 0;
+      const goodEnough =
+        fastRun.every((r) => acc(r) <= MOVING_MAX_ACC_M) ||
+        fastRun.every((r) => r.course != null && angleBetween(r.course, fastRun[0].course!) <= MOVING_SAME_WAY_DEG);
       const proven =
-        fastRun.length === MOVING_RUN && metresBetween(first, s) >= claimed * MOVING_PROOF;
+        fastRun.length === MOVING_RUN && goodEnough && metresBetween(first, s) >= claimed * MOVING_PROOF;
       if (proven) {
         window = [s];
         disagreeRun = 0;
         anchor = null;
-        shown = { lng: s.lng, lat: s.lat, accuracy: a };
+        shown = steer(shown, s, a);
+        wasMoving = true;
         lastGood = { accuracy: a, at: s.timestamp };
         return shown;
       }
+      wasMoving = false;
 
       /* Rule 4a: a much worse reading soon after a good one is ignored. */
       if (
