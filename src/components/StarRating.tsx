@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { useSettings } from '@/lib/settings/store';
@@ -14,7 +14,7 @@ import { useSettings } from '@/lib/settings/store';
  * on every single move event. It felt worse dragging right-to-left because that path
  * crosses more star boundaries per pixel of travel early on.
  *
- * The fix is `PanResponder`, created ONCE in a ref and never recreated. Its handlers
+ * The fix is `PanResponder`, created ONCE (in a lazy state initialiser) and never recreated. Its handlers
  * read the current value and measurements out of refs, so the gesture keeps the same
  * handler objects from touch-down to release no matter how many times the screen
  * re-renders underneath it.
@@ -43,18 +43,24 @@ export function StarRating({
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const stripRef = useRef<View>(null);
 
   /** Live values the gesture reads. Refs, so the responder never needs rebuilding. */
   const originX = useRef(0);
   const width = useRef(0);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const dragStartRef = useRef<(() => void) | undefined>(undefined);
-  const dragEndRef = useRef<(() => void) | undefined>(undefined);
-  dragStartRef.current = onDragStart;
-  dragEndRef.current = onDragEnd;
+  const dragStartRef = useRef(onDragStart);
+  const dragEndRef = useRef(onDragEnd);
+  /*
+    Point the refs at the latest callbacks after each render, not during it. A layout
+    effect runs before the screen paints, so the next touch event already sees them.
+  */
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+    dragStartRef.current = onDragStart;
+    dragEndRef.current = onDragEnd;
+  });
 
   const measure = useCallback(() => {
     stripRef.current?.measureInWindow((x, _y, w) => {
@@ -73,9 +79,28 @@ export function StarRating({
     [measure],
   );
 
-  /* Created once. The empty-ish dependency list is the entire point of this component. */
-  const responder = useRef(
-    PanResponder.create({
+  /*
+    Created once (a lazy state initialiser runs on the first render only). Never being
+    recreated is the entire point of this component. It reads everything live from refs,
+    so it never needs to close over a prop.
+
+    The lint exception: the rule sees refs handed to a function during render and assumes
+    they are read there. PanResponder.create only STORES these handlers; every ref is read
+    later, inside a touch event, which is allowed. Rewriting the gesture to satisfy the rule
+    is how the jitter above came about, so the frozen responder stays.
+  */
+  // eslint-disable-next-line react-hooks/refs -- refs are read only inside touch handlers
+  const [responder] = useState(() => {
+    const apply = (pageX: number) => {
+      const w = width.current;
+      if (w <= 0) return;
+      const ratio = Math.min(Math.max((pageX - originX.current) / w, 0), 1);
+      /* Round UP to the next half: the left half of star one is 0.5, its right half 1. */
+      const stepped = Math.ceil(ratio * COUNT * 2) / 2;
+      onChangeRef.current(Math.min(Math.max(stepped, 0.5), COUNT));
+    };
+
+    return PanResponder.create({
       /*
         CAPTURE phase. The plain `onStartShouldSetPanResponder` asks on the way back UP
         the tree, by which point the ScrollView above has already had its chance to
@@ -95,29 +120,15 @@ export function StarRating({
 
       onPanResponderGrant: (_e, g) => {
         dragStartRef.current?.();
-        applyRef.current(g.x0);
+        apply(g.x0);
       },
       onPanResponderMove: (_e, g) => {
-        applyRef.current(g.moveX);
+        apply(g.moveX);
       },
       onPanResponderRelease: () => dragEndRef.current?.(),
       onPanResponderTerminate: () => dragEndRef.current?.(),
-    }),
-  ).current;
-
-  /*
-    The responder above is frozen at first render, so it cannot close over `applyAt`
-    directly. It calls through this ref, which always points at the current function.
-  */
-  const applyRef = useRef<(pageX: number) => void>(() => {});
-  applyRef.current = (pageX: number) => {
-    const w = width.current;
-    if (w <= 0) return;
-    const ratio = Math.min(Math.max((pageX - originX.current) / w, 0), 1);
-    /* Round UP to the next half: the left half of star one is 0.5, its right half 1. */
-    const stepped = Math.ceil(ratio * COUNT * 2) / 2;
-    onChangeRef.current(Math.min(Math.max(stepped, 0.5), COUNT));
-  };
+    });
+  });
 
   const s = styles(theme);
 
@@ -156,7 +167,7 @@ export function StarRating({
 
       <View style={s.footer}>
         <Text style={s.hint}>
-          {value === 0 ? 'Tap a star, or drag across them' : `${value.toFixed(1)} of 5`}
+          {value === 0 ? t.starHint : t.starsOfFive(value.toFixed(1))}
         </Text>
 
         {/*
@@ -169,9 +180,9 @@ export function StarRating({
             hitSlop={12}
             style={s.clear}
             accessibilityRole="button"
-            accessibilityLabel="Clear rating"
+            accessibilityLabel={t.clearRating}
           >
-            <Text style={s.clearLabel}>Clear</Text>
+            <Text style={s.clearLabel}>{t.clear}</Text>
           </Pressable>
         )}
       </View>

@@ -1,5 +1,6 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import type { Strings } from '@/lib/i18n/strings';
 import type { LocationStatus } from '@/lib/location/useLocationGate';
 import { useSettings } from '@/lib/settings/store';
 
@@ -24,30 +25,16 @@ import { useSettings } from '@/lib/settings/store';
  * to them. Location makes the distances honest. It does not make the app function.
  */
 
-function copyFor(status: LocationStatus, online: boolean) {
-  const cached = online
-    ? 'The map is showing the last area you loaded.'
-    : 'You are offline, so the map is showing the last area you loaded.';
+function copyFor(status: LocationStatus, online: boolean, t: Strings) {
+  const cached = online ? t.mapCached : t.mapCachedOffline;
 
   switch (status) {
     case 'servicesOff':
-      return {
-        title: 'Location is off on this phone',
-        body: `Ayos cannot tell how far each shop is from you, so distances are measured from the area you picked instead. ${cached}`,
-        action: 'Open location settings',
-      };
+      return { title: t.locOffTitle, body: `${t.locOffBody} ${cached}`, action: t.locOffAction };
     case 'blocked':
-      return {
-        title: 'Ayos cannot use your location',
-        body: `Permission was turned off for this app, and Android will not ask again from here. You can change it in the app settings. ${cached}`,
-        action: 'Open app settings',
-      };
+      return { title: t.locBlockedTitle, body: `${t.locBlockedBody} ${cached}`, action: t.locBlockedAction };
     default:
-      return {
-        title: 'Turn on location?',
-        body: `It is only used to work out how far each shop is from you. It stays on your phone and is never sent anywhere. ${cached}`,
-        action: 'Turn on location',
-      };
+      return { title: t.locAskTitle, body: `${t.locAskBody} ${cached}`, action: t.locAskAction };
   }
 }
 
@@ -62,9 +49,9 @@ export function LocationCard({
   onAct: () => void;
   onDismiss: () => void;
 }) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const s = styles(theme);
-  const copy = copyFor(status, online);
+  const copy = copyFor(status, online, t);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
@@ -73,7 +60,7 @@ export function LocationCard({
         `onRequestClose`. Both matter: a card that can only be dismissed by finding the
         right button IS a gate, whatever the button says.
       */}
-      <Pressable style={s.scrim} onPress={onDismiss} accessibilityLabel="Close">
+      <Pressable style={s.scrim} onPress={onDismiss} accessibilityLabel={t.dismiss}>
         <Pressable style={s.card} onPress={() => {}}>
           <Text style={s.title}>{copy.title}</Text>
           <Text style={s.body}>{copy.body}</Text>
@@ -83,17 +70,14 @@ export function LocationCard({
           </Pressable>
 
           <Pressable onPress={onDismiss} style={s.secondary} accessibilityRole="button">
-            <Text style={s.secondaryText}>Not now</Text>
+            <Text style={s.secondaryText}>{t.notNow}</Text>
           </Pressable>
 
           {/*
             Said plainly, because it is the thing that makes "Not now" a real choice
             rather than a trap the rider has to guess their way out of.
           */}
-          <Text style={s.footnote}>
-            Everything else works without it: the shop list, search and phone numbers are
-            already saved on your phone.
-          </Text>
+          <Text style={s.footnote}>{t.locWorksWithout}</Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -115,7 +99,7 @@ export function AccuracyBanner({
   accuracyM: number;
   onPress: () => void;
 }) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const s = styles(theme);
   return (
     <Pressable
@@ -123,13 +107,13 @@ export function AccuracyBanner({
       style={s.banner}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={`Your position is accurate to about ${Math.round(accuracyM)} metres. Tap to improve it.`}
+      accessibilityLabel={t.roughFixSpoken(Math.round(accuracyM))}
     >
       <View style={[s.dot, { backgroundColor: theme.star }]} />
       <Text style={s.bannerText} numberOfLines={1}>
-        Rough fix · about {Math.round(accuracyM)} m out
+        {t.roughFix(Math.round(accuracyM))}
       </Text>
-      <Text style={s.bannerCta}>Improve</Text>
+      <Text style={s.bannerCta}>{t.improve}</Text>
     </Pressable>
   );
 }
@@ -156,13 +140,13 @@ export function NoFixBanner({ onPress }: { onPress: () => void }) {
       style={s.banner}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={`${t.noFixYet}. Tap to improve.`}
+      accessibilityLabel={`${t.noFixYet}. ${t.tapToImprove}`}
     >
       <View style={[s.dot, { backgroundColor: theme.star }]} />
       <Text style={s.bannerText} numberOfLines={1}>
         {t.noFixYet}
       </Text>
-      <Text style={s.bannerCta}>Improve</Text>
+      <Text style={s.bannerCta}>{t.improve}</Text>
     </Pressable>
   );
 }
@@ -186,7 +170,7 @@ export function FindingBanner() {
  * one switch in this app's settings ("Use precise location"), so the banner opens them.
  */
 export function PreciseBanner({ onPress }: { onPress: () => void }) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const s = styles(theme);
   return (
     <Pressable
@@ -194,13 +178,47 @@ export function PreciseBanner({ onPress }: { onPress: () => void }) {
       style={s.banner}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel="Approximate location is on, so distances can be kilometres off. Tap to turn on precise location."
+      accessibilityLabel={t.approxLocationSpoken}
     >
       <View style={s.dot} />
       <Text style={s.bannerText} numberOfLines={1}>
-        Approximate location · distances can be km off
+        {t.approxLocation}
       </Text>
-      <Text style={s.bannerCta}>Fix</Text>
+      <Text style={s.bannerCta}>{t.fix}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * The column every banner on the map sits in. Each banner used to pin itself to the same
+ * spot, which was fine while at most one showed; the update banner can appear alongside a
+ * location one, so they stack instead.
+ */
+export function NoticeStack({ children }: { children: React.ReactNode }) {
+  const { theme } = useSettings();
+  const s = styles(theme);
+  return (
+    <View style={s.stack} pointerEvents="box-none">
+      {children}
+    </View>
+  );
+}
+
+/**
+ * An update has downloaded in the background (lib/updates.ts). Lives with the location
+ * banners because it is the same kind of quiet notice, in the same place. Tapping asks
+ * before restarting; "Later" hides it until the app next opens.
+ */
+export function UpdateBanner({ onPress }: { onPress: () => void }) {
+  const { theme, t } = useSettings();
+  const s = styles(theme);
+  return (
+    <Pressable onPress={onPress} style={s.banner} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.updateReady}>
+      <View style={[s.dot, { backgroundColor: theme.open }]} />
+      <Text style={s.bannerText} numberOfLines={1}>
+        {t.updateReady}
+      </Text>
+      <Text style={s.bannerCta}>{t.restart}</Text>
     </Pressable>
   );
 }
@@ -213,9 +231,9 @@ export function LocationBanner({
   status: LocationStatus;
   onPress: () => void;
 }) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const s = styles(theme);
-  const label = status === 'servicesOff' ? 'Location off' : 'Location not allowed';
+  const label = status === 'servicesOff' ? t.locationOff : t.locationNotAllowed;
 
   return (
     <Pressable
@@ -223,13 +241,13 @@ export function LocationBanner({
       style={s.banner}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={`${label}. Tap to turn it on.`}
+      accessibilityLabel={`${label}. ${t.tapToTurnOn}`}
     >
       <View style={s.dot} />
       <Text style={s.bannerText} numberOfLines={1}>
-        {label} · distances are from your area
+        {label} · {t.distancesFromArea}
       </Text>
-      <Text style={s.bannerCta}>Turn on</Text>
+      <Text style={s.bannerCta}>{t.turnOn}</Text>
     </Pressable>
   );
 }
@@ -268,11 +286,9 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     footnote: { fontSize: 11.5, lineHeight: 16, color: theme.ink3, textAlign: 'center' },
 
+    /* Clear of the map buttons on the right. Banners stack down from here, never overlap. */
+    stack: { position: 'absolute', left: 10, right: 62, top: 12, gap: 6 },
     banner: {
-      position: 'absolute',
-      left: 10,
-      right: 62,
-      top: 12,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,

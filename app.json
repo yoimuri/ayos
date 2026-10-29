@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Ayos",
+    "name": "Ayoos",
     "slug": "ayos",
     "version": "1.1.0",
     "orientation": "portrait",
@@ -38,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Ayos uses your location to show which repair shops are nearest to you. It is never shared and never leaves your phone.",
+          "locationAlwaysAndWhenInUsePermission": "Ayoos uses your location to show which repair shops are nearest to you. It is never shared and never leaves your phone.",
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false
         }

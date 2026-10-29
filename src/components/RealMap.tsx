@@ -526,16 +526,20 @@ export function RealMap({
 
   const byId = useMemo(() => new Map(shops.map((shop) => [shop.id, shop])), [shops]);
 
+  /* Rebuilt only when the focused shop or its position changes, not on every `focus` object. */
+  const focusId = focus?.shop.id;
+  const focusLng = focus?.shop.lng;
+  const focusLat = focus?.shop.lat;
   const focusFeature = useMemo(
     () =>
-      focus
+      focusId !== undefined && focusLng !== undefined && focusLat !== undefined
         ? ({
             type: 'Feature',
-            properties: { id: focus.shop.id },
-            geometry: { type: 'Point', coordinates: [focus.shop.lng, focus.shop.lat] },
+            properties: { id: focusId },
+            geometry: { type: 'Point', coordinates: [focusLng, focusLat] },
           } as GeoJSON.Feature)
         : null,
-    [focus?.shop.id, focus?.shop.lng, focus?.shop.lat],
+    [focusId, focusLng, focusLat],
   );
 
   const ringFeature = useMemo(

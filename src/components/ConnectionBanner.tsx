@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,36 +26,39 @@ export function ConnectionBanner() {
 
   const [visible, setVisible] = useState(false);
   const [mode, setMode] = useState<'offline' | 'online'>('offline');
-  const slide = useRef(new Animated.Value(-120)).current;
-  /* Remember the last known state so the first reading never claims "back online". */
-  const previous = useRef<boolean | null>(null);
+  /* Created once. State rather than a ref, so render never reads a ref. */
+  const [slide] = useState(() => new Animated.Value(-120));
+  /* The last reading acted on, so the first reading never claims "back online". */
+  const [previous, setPrevious] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    if (online === null) return;
-
-    const wasOnline = previous.current;
-    previous.current = online;
-
+  /*
+    Reacting to a new reading DURING render, not in an effect: the banner state changes in
+    the same pass as the reading, instead of one extra render later.
+  */
+  if (online !== null && online !== previous) {
+    setPrevious(online);
     if (!online) {
       setMode('offline');
       setVisible(true);
-      return;
-    }
-
-    /*
-      Only announce a recovery if we actually saw a drop. Without this check, opening
-      the app on a working connection would flash "Back online" at a rider who was
-      never offline.
-    */
-    if (wasOnline === false) {
+    } else if (previous === false) {
+      /*
+        Only announce a recovery if we actually saw a drop. Without this check, opening
+        the app on a working connection would flash "Back online" at a rider who was
+        never offline.
+      */
       setMode('online');
       setVisible(true);
-      const timer = setTimeout(() => setVisible(false), BACK_ONLINE_VISIBLE_MS);
-      return () => clearTimeout(timer);
+    } else {
+      setVisible(false);
     }
+  }
 
-    setVisible(false);
-  }, [online]);
+  /* "Back online" leaves by itself. A new drop changes `mode`, which cancels the timer. */
+  useEffect(() => {
+    if (mode !== 'online' || !visible) return;
+    const timer = setTimeout(() => setVisible(false), BACK_ONLINE_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [mode, visible]);
 
   useEffect(() => {
     Animated.timing(slide, {
@@ -93,8 +96,8 @@ export function ConnectionBanner() {
           {offline
             ? COLLECTED_AT
               ? t.noSignalUsing(readableDate(COLLECTED_AT))
-              : 'No connection · showing saved shops'
-            : 'Back online'}
+              : t.noConnection
+            : t.backOnline}
         </Text>
       </View>
     </Animated.View>

@@ -1,4 +1,4 @@
-# Ayos
+# Ayoos
 
 An Android app that shows motorcycle riders the repair shops nearest to them, and keeps
 working when their phone has no signal.
@@ -174,6 +174,9 @@ Built, not yet checked on the test phone:
 - Location works with the phone's network-assisted location ("Google Location Accuracy")
   switched off, as Google Maps does. If no live reading arrives, a banner says so and the
   last known position (up to 30 minutes old) is shown faded instead of an empty map
+- Updates without closing the app: an "Update ready · Restart" banner once a new version
+  has downloaded, and "Check for updates" in Settings
+- Settings in four sections, with choices that open in place and switches for on/off
 
 Not built yet:
 

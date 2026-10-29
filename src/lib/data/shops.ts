@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   closedText,
@@ -184,9 +184,24 @@ export function useShop(id: string, from: [number, number] | null, area: Area | 
  * Open/closed is worked out at the same moment. It is not re-checked on a timer; the list
  * is rebuilt whenever the rider moves or the app is reopened, which is when it is looked at.
  */
+/**
+ * The current minute, ticking. Open/closed is worked out from the clock, so the list has to
+ * be rebuilt as time passes: before this, a shop that closed while the app sat open still
+ * read "Open" (and could still trigger a shop-ahead alert) until the rider moved.
+ */
+function useMinute(): number {
+  const [minute, setMinute] = useState(() => Math.floor(Date.now() / 60_000));
+  useEffect(() => {
+    const timer = setInterval(() => setMinute(Math.floor(Date.now() / 60_000)), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  return minute;
+}
+
 export function useShops(from: [number, number] | null, area: Area | null): Shop[] {
   const origin = from ?? AREA_CENTRES[area ?? 'other'];
   const [olng, olat] = origin;
+  const minute = useMinute();
 
   return useMemo(() => {
     const now = new Date();
@@ -198,7 +213,7 @@ export function useShops(from: [number, number] | null, area: Area | null): Shop
       The linter cannot see that the rounding is the point, hence the two disables.
     */
     // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
-  }, [Math.round(olng * 1000), Math.round(olat * 1000)]);
+  }, [Math.round(olng * 1000), Math.round(olat * 1000), minute]);
 }
 
 /*

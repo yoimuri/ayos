@@ -86,8 +86,8 @@ export default function RateScreen() {
           <View style={s.mockNote}>
             <Text style={s.mockNoteTitle}>This is a demonstration</Text>
             <Text style={s.mockNoteBody}>
-              Nothing was stored and no email was sent. The screens and the rules are real; the
-              server behind them comes in a later update.
+              Your rating is kept on this phone and shows under My shops, Rated. No email was
+              sent and nobody else sees it yet: ratings go to the server in a later update.
             </Text>
           </View>
 

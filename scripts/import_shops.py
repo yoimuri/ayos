@@ -20,6 +20,14 @@ shops green, each with a comment saying what it was) and a merge report. A perso
 that copy, it becomes the field sheet, and then steps 1-3 run as usual. See "survey
 merge" below for the rules.
 
+SHOP IDS live in the sheet's ID column, so a shop keeps its id when its name or pin is
+corrected (riders' Saved, Visited and ratings are stored against it). Rows with no id yet
+get one made from name and position; store those in a copy of the sheet with
+
+    python scripts/import_shops.py --write-ids
+
+and make that copy the field sheet. Never edit or copy an id by hand.
+
 WHY TWO STEPS. The shop list is field work collected shop by shop, and the app ships
 it to every rider on the next update. A script that silently drops, merges or rewrites
 rows is a script nobody can trust, so this one changes NOTHING the app reads until
@@ -89,6 +97,8 @@ COLUMNS = {
     "time": "time",
     "day closed": "closed",
     "image": "image",
+    # The shop's permanent id. Written by --write-ids, never typed.
+    "id": "id",
     # Written by --survey; the import itself does not read it.
     "survey note": "note",
     "note": "note",
@@ -424,14 +434,21 @@ def find_duplicates(shops):
 
 # ------------------------------------------------------------------ ids
 
+ID_FORMAT = re.compile(r"^s[0-9a-f]{8}(-\d+)?$")
+
+
 def make_id(name, lat, lng, taken):
     """
-    Derived from the shop itself, not its row number.
+    A NEW shop's id, derived from the shop itself, not its row number.
 
     The old converter numbered shops by position, so inserting one row near the top of
     the sheet renumbered every shop below it. This id survives rows being added,
-    removed or re-sorted. It changes only if the shop's name or position is corrected,
-    which is a real change to that shop.
+    removed or re-sorted.
+
+    It is made only ONCE per shop. After --write-ids stores it in the sheet's ID column,
+    the import reads it from there, so correcting the name or the pin later keeps the id.
+    (Made fresh on every import, as before 29 Oct 2026, a corrected shop got a new id and
+    riders' Saved, Visited and ratings for it were orphaned.)
     """
     key = "%s|%.4f|%.4f" % (" ".join(name.lower().split()), lat, lng)
     base = "s" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
@@ -475,12 +492,37 @@ def read_rows(ws):
     return out
 
 
+def sheet_ids(rows):
+    """
+    The ids already in the sheet: {row number: id}, plus the problems found.
+
+    The first row to carry an id keeps it. A second row with the same id (a copied row)
+    and anything not shaped like an id are listed, and those rows get a new id made.
+    """
+    kept, seen, problems = {}, {}, []
+    for row in rows:
+        sid = clean_text(row.get("id"))
+        if not sid:
+            continue
+        if not ID_FORMAT.match(sid):
+            problems.append((row["_row"], sid, "not an id this script made"))
+        elif sid in seen:
+            problems.append((row["_row"], sid, "same id as row %d" % seen[sid]))
+        else:
+            kept[row["_row"]] = sid
+            seen[sid] = row["_row"]
+    return kept, problems
+
+
 def build(rows):
     """Every row in, (shops, report facts) out. Pure: no files, so it can be tested."""
     shops, skipped, bad_phones, unknown_tags = [], [], [], Counter()
     no_tags, odd_closed, hours_mismatch = [], [], []
     counts = Counter()
-    taken = set()
+    ids, id_problems = sheet_ids(rows)
+    # Ids from the sheet are claimed first, so a newly made id can never collide with one.
+    taken = set(ids.values())
+    ids_made = []
 
     for row in rows:
         n = row["_row"]
@@ -501,9 +543,14 @@ def build(rows):
         if not tags:
             no_tags.append((n, name))
 
+        sid = ids.get(n)
+        if sid is None:
+            sid = make_id(name, lat, lng, taken)
+            ids_made.append((n, name, sid))
+
         shop = {
             "_row": n,
-            "id": make_id(name, lat, lng, taken),
+            "id": sid,
             "name": name,
             "lat": round(lat, 6),
             "lng": round(lng, 6),
@@ -573,6 +620,8 @@ def build(rows):
         "duplicates": find_duplicates(shops),
         "generic_names": [(s["_row"], s["name"]) for s in shops if not name_core(s["name"])],
         "counts": counts,
+        "ids_made": ids_made,
+        "id_problems": id_problems,
     }
     return shops, facts
 
@@ -637,9 +686,28 @@ def write_report(path, source, sheet, collected_at, rows, shops, facts, diff, si
         ["shop emails left out on purpose", facts["counts"]["email present, not imported"]],
         ["city unclear in the address (listed below)", len(facts["city_unclear"])],
         ["photos", 0],
+        ["ids made this run (no ID in the sheet yet)", len(facts["ids_made"])],
         ["candidate file size", "%d KB" % round(size / 1024)],
     ]))
     L.append("")
+    if facts["ids_made"] or facts["id_problems"]:
+        L.append("## Shop ids not stored in the sheet yet")
+        L.append("")
+        L.append("These shops got an id made from their name and pin. If either is corrected before the id "
+                 "is stored, the id changes and riders lose their Saved, Visited and ratings for that shop. "
+                 "Store them now: `python scripts/import_shops.py --write-ids`, then make that copy the field sheet.")
+        L.append("")
+        if facts["id_problems"]:
+            L.append("**ID cells that could not be used** (the row got a new id):")
+            L.append("")
+            L.append(table(["row", "ID cell", "problem"], facts["id_problems"]))
+            L.append("")
+        if facts["ids_made"]:
+            L.append(table(["row", "name", "new id"], facts["ids_made"][:50]))
+            if len(facts["ids_made"]) > 50:
+                L.append("")
+                L.append("_and %d more_" % (len(facts["ids_made"]) - 50))
+            L.append("")
     if diff:
         L.append("## Compared with the list the app ships today")
         L.append("")
@@ -751,7 +819,7 @@ SURVEY_COLUMNS = {
 UNKNOWN_TO_APP = ("email", "note")
 FIELD_HEADING = {"name": "Name", "address": "Address", "lat": "Latitude", "lng": "Longitude",
                  "services": "Services", "phone": "Contact No.", "social": "Social Media",
-                 "email": "Email", "time": "Time", "closed": "Day Closed", "note": "Survey note"}
+                 "email": "Email", "time": "Time", "closed": "Day Closed", "note": "Survey note", "id": "ID"}
 """About 1 m of latitude. Closer than that, two coordinates are the same pin."""
 SAME_SPOT = 1e-5
 FILL_CHANGED = "FFFFE58A"
@@ -959,7 +1027,7 @@ def write_survey(ws, writes, appends):
 
     def column(field):
         nonlocal last
-        if field not in col:  # only the survey note column can be missing
+        if field not in col:  # only the survey note and ID columns can be missing
             last += 1
             ws.cell(1, last, FIELD_HEADING[field])
             col[field] = last
@@ -1077,6 +1145,46 @@ def merge_survey(master, sheet, paths):
     print("then run the import as usual.")
 
 
+# ------------------------------------------------------------------ store ids (--write-ids)
+
+def write_ids(master, sheet):
+    """
+    Store every shop's id in the ID column of a COPY of the sheet. Ids already there are
+    never changed; only empty ID cells are filled (coloured, with a comment). The first run
+    fills every row with the id the app already uses, so nothing riders saved is lost.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(master)
+    ws = wb[sheet] if sheet in wb.sheetnames else wb.worksheets[0]
+    if any(c.data_type == "f" for r in ws.iter_rows() for c in r):
+        sys.exit("The sheet has formulas; this script reads them as text. Paste them as values first.")
+    rows = read_rows(ws)
+    shops, facts = build(rows)
+    stored, _ = sheet_ids(rows)
+    note = "Shop id, stored by --write-ids. Do not edit or copy it."
+    writes = [(s["_row"], "id", s["id"], note) for s in shops if s["_row"] not in stored]
+    write_survey(ws, writes, [])
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(master))[0]
+    out = os.path.join(OUT_DIR, "%s (ids %s).xlsx" % (stem, dt.date.today().isoformat()))
+    wb.save(out)
+
+    try:
+        with open(APP_FILE, encoding="utf-8") as fh:
+            app_ids = {s["id"] for s in json.load(fh)["shops"]}
+    except (OSError, ValueError, KeyError):
+        app_ids = set()
+    same = sum(1 for s in shops if s["id"] in app_ids)
+    print("%d ids written, %d already in the sheet, %d unusable ID cells (listed in the import report)" % (
+        len(writes), len(shops) - len(writes), len(facts["id_problems"])))
+    print("%d of %d shops keep the id the app uses today" % (same, len(shops)))
+    print("sheet with ids  %s" % out)
+    print("Nothing in the app changed. Make this copy the field sheet; from then on a corrected")
+    print("name or pin keeps its id.")
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -1087,7 +1195,17 @@ def main():
     ap.add_argument("--apply", action="store_true", help="Copy the reviewed candidate into the app. Nothing else.")
     ap.add_argument("--survey", nargs="+", metavar="FILE",
                     help="App survey export(s) to merge into a copy of the sheet. Touches nothing else.")
+    ap.add_argument("--write-ids", action="store_true",
+                    help="Store every shop's id in a copy of the sheet. Touches nothing else.")
     args = ap.parse_args()
+
+    if args.write_ids:
+        if args.apply or args.survey:
+            sys.exit("--write-ids runs on its own: a person makes its copy the field sheet first.")
+        if not os.path.exists(args.xlsx):
+            sys.exit("Cannot find the spreadsheet: %s" % args.xlsx)
+        write_ids(args.xlsx, args.sheet)
+        return
 
     if args.survey:
         if args.apply:

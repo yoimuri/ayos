@@ -218,6 +218,40 @@ class Rows(unittest.TestCase):
         self.assertEqual({s["name"]: s["id"] for s in a}, {s["name"]: s["id"] for s in b})
 
 
+class StoredIds(unittest.TestCase):
+    """The sheet's ID column: a stored id outlives corrections to the name and pin."""
+
+    def test_a_stored_id_survives_a_corrected_name_and_pin(self):
+        sid = build([row(2, name="Moto Werks")])[0][0]["id"]
+        shops, facts = build([row(2, name="Moto Works", lat=14.6003, id=sid)])
+        self.assertEqual(shops[0]["id"], sid)
+        self.assertEqual(facts["ids_made"], [])
+
+    def test_without_an_id_the_old_id_is_made_and_listed(self):
+        before, _ = build([row(2)])
+        shops, facts = build([row(2, id=None)])
+        self.assertEqual(shops[0]["id"], before[0]["id"])
+        self.assertEqual(facts["ids_made"], [(2, "Shop 2", before[0]["id"])])
+
+    def test_a_copied_row_keeps_one_id_and_the_copy_gets_a_new_one(self):
+        shops, facts = build([row(2, id="s0000abcd"), row(3, name="Copy", lat=14.61, id="s0000abcd")])
+        self.assertEqual(shops[0]["id"], "s0000abcd")
+        self.assertNotEqual(shops[1]["id"], "s0000abcd")
+        self.assertEqual(facts["id_problems"], [(3, "s0000abcd", "same id as row 2")])
+
+    def test_a_typed_id_is_not_trusted(self):
+        shops, facts = build([row(2, id="shop 12")])
+        self.assertRegex(shops[0]["id"], r"^s[0-9a-f]{8}$")
+        self.assertEqual(facts["id_problems"], [(2, "shop 12", "not an id this script made")])
+
+    def test_a_new_id_never_takes_one_already_stored(self):
+        made = build([row(3, name="New")])[0][0]["id"]
+        # Another row already holds exactly the id "New" would get.
+        shops, _ = build([row(2, name="Old", id=made), row(3, name="New")])
+        self.assertEqual(shops[0]["id"], made)
+        self.assertEqual(shops[1]["id"], made + "-2")
+
+
 def change(shop_id, column, field, before, after, date="2026-10-12 09:00", shop="Shop 2"):
     return {"date": date, "shop_id": shop_id, "shop": shop, "column": column, "field": field,
             "before": before, "after": after}

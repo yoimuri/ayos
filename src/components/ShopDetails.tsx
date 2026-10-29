@@ -231,11 +231,8 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
 
       {!shop.phone && (
         <View style={s.noticeBox}>
-          <Text style={s.noticeTitle}>No phone number yet</Text>
-          <Text style={s.noticeBody}>
-            We have not collected one for this shop. You can still get directions, and the
-            address below is the one recorded on the visit.
-          </Text>
+          <Text style={s.noticeTitle}>{t.noPhoneTitle}</Text>
+          <Text style={s.noticeBody}>{t.noPhoneBody}</Text>
         </View>
       )}
 

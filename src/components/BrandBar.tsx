@@ -8,7 +8,7 @@ import { WORDMARK } from '@/lib/theme/fonts';
 /**
  * The brand band at the top of every screen.
  *
- * This is the single biggest thing separating Ayos from a generic directory app. Grab,
+ * This is the single biggest thing separating Ayoos from a generic directory app. Grab,
  * Lalamove and JoyRide all do the same thing: the brand colour OWNS a surface at the
  * top and the wordmark lives inside it. Sprinkling the colour on small accents, which
  * is what the app did before, reads as no brand at all.
@@ -100,7 +100,7 @@ export function BrandBar({
           hitSlop={10}
           style={s.brandBtn}
           accessibilityRole="button"
-          accessibilityLabel="Ayos, back to the shop list"
+          accessibilityLabel="Ayoos, back to the shop list"
         >
           <Wordmark />
         </Pressable>

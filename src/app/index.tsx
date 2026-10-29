@@ -29,13 +29,16 @@ import {
   NoFixBanner,
   LocationBanner,
   LocationCard,
+  NoticeStack,
   PreciseBanner,
+  UpdateBanner,
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
 import { RealMap } from '@/components/RealMap';
 import { ShopAheadBanner } from '@/components/ShopAhead';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
 import { useOnline } from '@/lib/net/useOnline';
+import { askToRestart, useUpdateReady } from '@/lib/updates';
 import { useLocationGate } from '@/lib/location/useLocationGate';
 import { useAppShops } from '@/lib/data/shops';
 import { useExportReminder } from '@/lib/fieldwork/store';
@@ -414,6 +417,11 @@ export default function HomeScreen() {
     else Keyboard.dismiss();
   };
 
+  /* An update waiting for a restart; "Later" hides the banner until the app next opens. */
+  const updateReady = useUpdateReady();
+  const [updateLater, setUpdateLater] = useState(false);
+
+  const hasPosition = gate.position !== null;
   const tourSteps = useMemo<TourStep[]>(
     () => [
       {
@@ -445,16 +453,25 @@ export default function HomeScreen() {
       },
       { target: 'details-back', text: t.tourBackToList, advance: 'tap' },
       { target: 'radius', text: t.tourRadius, advance: 'tap', before: () => setFocus(null) },
-      {
-        target: 'recentre',
-        text: t.tourRecentre,
-        advance: 'tap',
-        /* In List mode the map, and this button on it, are hidden behind the panel. */
-        before: () => setSheetAt('both'),
-      },
+      /*
+        Only with a position. The recentre button is drawn only when the app knows where the
+        rider is, so with location off this step used to be skipped mid-tour and the counter
+        jumped from 5 to 7. Leaving it out keeps the count honest: 1 to 6.
+      */
+      ...(hasPosition
+        ? [
+            {
+              target: 'recentre',
+              text: t.tourRecentre,
+              advance: 'tap' as const,
+              /* In List mode the map, and this button on it, are hidden behind the panel. */
+              before: () => setSheetAt('both'),
+            },
+          ]
+        : []),
       { target: 'help', text: t.tourHelp, advance: 'next' },
     ],
-    [t, openShop],
+    [t, openShop, hasPosition],
   );
 
   /*
@@ -520,7 +537,7 @@ export default function HomeScreen() {
           <View style={s.grow} />
           {/*
             SHOW / HIDE SEARCH. Folding the box away gives the map more room;
-            the choice is remembered. The arrow points the way the box will move.
+            the choice is remembered. A magnifier, so it reads as "search" at a glance.
           */}
           <Pressable
             onPress={() => {
@@ -535,7 +552,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel={settings.searchHidden ? t.showSearch : t.hideSearch}
           >
-            <ExpandIcon open={!settings.searchHidden} size={24} color={theme.bandInk} />
+            <SearchIcon size={22} color={theme.bandInk} />
           </Pressable>
           {/*
             HELP, where it can always be found. Replays the tutorial. A question mark
@@ -724,46 +741,55 @@ export default function HomeScreen() {
           Stays until location is actually on. A rider who dismissed the card would
           otherwise have to relaunch the app to find the offer again.
         */}
-        {gate.status !== 'checking' &&
-          gate.status !== 'ready' &&
-          !cardOpen && (
-            <LocationBanner status={gate.status} onPress={() => setCardOpen(true)} />
-          )}
+        <NoticeStack>
+          {gate.status !== 'checking' &&
+            gate.status !== 'ready' &&
+            !cardOpen && (
+              <LocationBanner status={gate.status} onPress={() => setCardOpen(true)} />
+            )}
 
-        {/*
-          Location is working, but not well enough to say which side of the road you are
-          on. 50 metres is about one Metro Manila block, which is the point at which the
-          dot stops answering the question the rider actually asked.
-        */}
-        {/*
-          "Finding your location" first (a state, never an error), and only once
-          that has settled or timed out, the rough-fix banner if the result is still poor.
-          Never both at once.
-        */}
-        {/*
-          Approximate location beats every other notice: with it on, nothing about where
-          the rider is can be trusted, and the fix is one switch.
-        */}
-        {gate.status === 'ready' && gate.precise === false && (
-          <PreciseBanner onPress={gate.openSettings} />
-        )}
-        {gate.precise !== false && gate.finding && <FindingBanner />}
-        {/*
-          Searched, and still no LIVE reading: say so, rather than leaving an empty map or a
-          faded remembered spot to speak for itself.
-        */}
-        {gate.precise !== false && !gate.finding && gate.status === 'ready' && (!gate.position || gate.stale) && (
-          <NoFixBanner onPress={() => void gate.improveAccuracy()} />
-        )}
-        {gate.precise !== false &&
-          !gate.finding &&
-          gate.status === 'ready' &&
-          gate.position &&
-          !gate.stale &&
-          gate.accuracyM !== null &&
-          gate.accuracyM > 50 && (
-            <AccuracyBanner accuracyM={gate.accuracyM} onPress={() => void gate.improveAccuracy()} />
+          {/*
+            Location is working, but not well enough to say which side of the road you are
+            on. 50 metres is about one Metro Manila block, which is the point at which the
+            dot stops answering the question the rider actually asked.
+          */}
+          {/*
+            "Finding your location" first (a state, never an error), and only once
+            that has settled or timed out, the rough-fix banner if the result is still poor.
+            Never both at once.
+          */}
+          {/*
+            Approximate location beats every other notice: with it on, nothing about where
+            the rider is can be trusted, and the fix is one switch.
+          */}
+          {gate.status === 'ready' && gate.precise === false && (
+            <PreciseBanner onPress={gate.openSettings} />
           )}
+          {gate.precise !== false && gate.finding && <FindingBanner />}
+          {/*
+            Searched, and still no LIVE reading: say so, rather than leaving an empty map or a
+            faded remembered spot to speak for itself.
+          */}
+          {gate.precise !== false && !gate.finding && gate.status === 'ready' && (!gate.position || gate.stale) && (
+            <NoFixBanner onPress={() => void gate.improveAccuracy()} />
+          )}
+          {gate.precise !== false &&
+            !gate.finding &&
+            gate.status === 'ready' &&
+            gate.position &&
+            !gate.stale &&
+            gate.accuracyM !== null &&
+            gate.accuracyM > 50 && (
+              <AccuracyBanner accuracyM={gate.accuracyM} onPress={() => void gate.improveAccuracy()} />
+            )}
+          {/*
+            A new version downloaded in the background while the app was open. One tap asks
+            to restart into it, so nobody has to close and reopen the app (lib/updates.ts).
+          */}
+          {updateReady && !updateLater && (
+            <UpdateBanner onPress={() => askToRestart(t, () => setUpdateLater(true))} />
+          )}
+        </NoticeStack>
 
         {aheadBanner && (
           <ShopAheadBanner

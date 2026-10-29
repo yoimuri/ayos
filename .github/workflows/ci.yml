@@ -1,0 +1,39 @@
+# Runs on every push to main and on every pull request: type checks, lint and both test suites.
+# A red result here means the commit should not be published as an update.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 runs the TypeScript tests directly (node --test), as on the dev machine.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # The shop import tests use only Python's standard library.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: npm ci
+
+      - name: Type-check the app
+        run: npx tsc --noEmit
+
+      - name: Type-check the tests
+        run: npx tsc -p tests
+
+      - name: Tests (app logic and shop import)
+        run: npm test
+
+      - name: Lint
+        run: npx expo lint

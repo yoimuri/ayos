@@ -61,7 +61,7 @@ export type LocationDebug = {
   speed: number | null;
   /**
    * Why the live position watch failed, exactly as the OS said it, or null while it is
-   * running. The one line that tells "location is on but Ayos gets nothing" apart.
+   * running. The one line that tells "location is on but Ayoos gets nothing" apart.
    */
   watchError: string | null;
 };
