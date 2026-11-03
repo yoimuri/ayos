@@ -10,9 +10,9 @@
  * a tap on "Honda" is the same answer every time. The model is the one typed field,
  * because there are hundreds of models and it is optional.
  *
- * WHERE THE ANSWERS GO: nowhere yet. They are saved on the rider's phone only, and the
- * screen says so. They can reach the team once usage events exist ,
- * sent without any name, email or position. Until then nobody but the rider sees them.
+ * WHERE THE ANSWERS GO: nowhere yet (DEMO). They are saved on the rider's phone only; the
+ * confirmation screen after them is a demo stand-in for sending. They reach the team once
+ * the database exists, sent without any name, email or position.
  *
  * The lists follow what the field team sees in shops. Changing one is editing a line here.
  */
@@ -69,3 +69,12 @@ export const SERVICES = [
   'Helmet and riding gear',
   'Other',
 ];
+
+/**
+ * REQUIRED ON FIRST USE (Clint, 1 Nov): the app opens only once these are answered. Brand,
+ * year, visits and at least one service; the model stays optional (it is the one typed
+ * field, and many riders will not know it).
+ */
+export function surveyComplete(s: RiderSurvey | undefined): boolean {
+  return !!s && !!s.brand && !!s.year && !!s.visits && (s.services?.length ?? 0) > 0;
+}

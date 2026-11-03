@@ -2,6 +2,7 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'rea
 
 import type { Strings } from '@/lib/i18n/strings';
 import type { LocationStatus } from '@/lib/location/useLocationGate';
+import { UpdateIcon } from '@/components/icons';
 import { useSettings } from '@/lib/settings/store';
 
 /**
@@ -25,33 +26,32 @@ import { useSettings } from '@/lib/settings/store';
  * to them. Location makes the distances honest. It does not make the app function.
  */
 
-function copyFor(status: LocationStatus, online: boolean, t: Strings) {
-  const cached = online ? t.mapCached : t.mapCachedOffline;
-
+/* One short sentence each (Clint, 30 Oct: long text overwhelms riders). */
+function copyFor(status: LocationStatus, t: Strings) {
   switch (status) {
     case 'servicesOff':
-      return { title: t.locOffTitle, body: `${t.locOffBody} ${cached}`, action: t.locOffAction };
+      return { title: t.locOffTitle, body: t.locOffBody, action: t.locOffAction };
     case 'blocked':
-      return { title: t.locBlockedTitle, body: `${t.locBlockedBody} ${cached}`, action: t.locBlockedAction };
+      return { title: t.locBlockedTitle, body: t.locBlockedBody, action: t.locBlockedAction };
     default:
-      return { title: t.locAskTitle, body: `${t.locAskBody} ${cached}`, action: t.locAskAction };
+      return { title: t.locAskTitle, body: t.locAskBody, action: t.locAskAction };
   }
 }
 
 export function LocationCard({
   status,
-  online,
   onAct,
   onDismiss,
 }: {
   status: LocationStatus;
-  online: boolean;
+  /** Still passed by home; the card no longer adds a line about the cached map. */
+  online?: boolean;
   onAct: () => void;
   onDismiss: () => void;
 }) {
   const { theme, t } = useSettings();
   const s = styles(theme);
-  const copy = copyFor(status, online, t);
+  const copy = copyFor(status, t);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
@@ -110,7 +110,7 @@ export function AccuracyBanner({
       accessibilityLabel={t.roughFixSpoken(Math.round(accuracyM))}
     >
       <View style={[s.dot, { backgroundColor: theme.star }]} />
-      <Text style={s.bannerText} numberOfLines={1}>
+      <Text style={s.bannerText} numberOfLines={2}>
         {t.roughFix(Math.round(accuracyM))}
       </Text>
       <Text style={s.bannerCta}>{t.improve}</Text>
@@ -143,7 +143,7 @@ export function NoFixBanner({ onPress }: { onPress: () => void }) {
       accessibilityLabel={`${t.noFixYet}. ${t.tapToImprove}`}
     >
       <View style={[s.dot, { backgroundColor: theme.star }]} />
-      <Text style={s.bannerText} numberOfLines={1}>
+      <Text style={s.bannerText} numberOfLines={2}>
         {t.noFixYet}
       </Text>
       <Text style={s.bannerCta}>{t.improve}</Text>
@@ -157,7 +157,7 @@ export function FindingBanner() {
   return (
     <View style={s.banner} accessibilityLiveRegion="polite">
       <ActivityIndicator size="small" color={theme.accent} />
-      <Text style={s.bannerText} numberOfLines={1}>
+      <Text style={s.bannerText} numberOfLines={2}>
         {t.findingLocation}
       </Text>
     </View>
@@ -181,7 +181,7 @@ export function PreciseBanner({ onPress }: { onPress: () => void }) {
       accessibilityLabel={t.approxLocationSpoken}
     >
       <View style={s.dot} />
-      <Text style={s.bannerText} numberOfLines={1}>
+      <Text style={s.bannerText} numberOfLines={2}>
         {t.approxLocation}
       </Text>
       <Text style={s.bannerCta}>{t.fix}</Text>
@@ -194,11 +194,11 @@ export function PreciseBanner({ onPress }: { onPress: () => void }) {
  * spot, which was fine while at most one showed; the update banner can appear alongside a
  * location one, so they stack instead.
  */
-export function NoticeStack({ children }: { children: React.ReactNode }) {
+export function NoticeStack({ children, top }: { children: React.ReactNode; top?: number }) {
   const { theme } = useSettings();
   const s = styles(theme);
   return (
-    <View style={s.stack} pointerEvents="box-none">
+    <View style={[s.stack, top !== undefined && { top }]} pointerEvents="box-none">
       {children}
     </View>
   );
@@ -209,16 +209,46 @@ export function NoticeStack({ children }: { children: React.ReactNode }) {
  * banners because it is the same kind of quiet notice, in the same place. Tapping asks
  * before restarting; "Later" hides it until the app next opens.
  */
-export function UpdateBanner({ onPress }: { onPress: () => void }) {
+/**
+ * A NEW VERSION IS READY: a small, faded chip in the map's bottom-left corner, above the
+ * map credit, away from the search, the shop panel and the map buttons (Clint, 31 Oct: the
+ * first card covered the map). "Update" restarts into the downloaded version at once
+ * (about a second; settings, saved shops and ratings are on disk). The X hides it until the
+ * app next opens. It never restarts by itself: the rider may be mid-ride.
+ */
+export function UpdateChip({ bottom, onUpdate, onClose }: { bottom: number; onUpdate: () => void; onClose: () => void }) {
   const { theme, t } = useSettings();
   const s = styles(theme);
   return (
-    <Pressable onPress={onPress} style={s.banner} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.updateReady}>
-      <View style={[s.dot, { backgroundColor: theme.open }]} />
-      <Text style={s.bannerText} numberOfLines={1}>
-        {t.updateReady}
+    <View style={[s.updateChip, { bottom }]} accessibilityLiveRegion="polite">
+      <Pressable onPress={onUpdate} hitSlop={8} style={s.updateMain} accessibilityRole="button" accessibilityLabel={`${t.updateCardTitle}. ${t.updateCardAction}`}>
+        <UpdateIcon size={17} color={theme.accent} />
+        <Text style={s.updateTitle} numberOfLines={1}>
+          {t.updateCardTitle}
+        </Text>
+        <Text style={s.updateAction}>{t.updateCardAction}</Text>
+      </Pressable>
+      <Pressable onPress={onClose} hitSlop={10} style={s.updateClose} accessibilityRole="button" accessibilityLabel={t.dismiss}>
+        <Text style={s.updateCloseText}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * OUTSIDE METRO MANILA: a quiet line that stays while the rider is outside the area Ayoos
+ * covers (lib/geo/coverage.ts). Tapping it shows the explanation again.
+ */
+export function OutsideBanner({ onPress }: { onPress: () => void }) {
+  const { theme, t } = useSettings();
+  const s = styles(theme);
+  return (
+    <Pressable onPress={onPress} style={s.banner} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.outsideTitle}>
+      <View style={[s.dot, { backgroundColor: theme.ink3 }]} />
+      <Text style={s.bannerText} numberOfLines={2}>
+        {t.outsideBanner}
       </Text>
-      <Text style={s.bannerCta}>{t.restart}</Text>
+      <Text style={s.bannerCta}>{t.outsideMore}</Text>
     </Pressable>
   );
 }
@@ -244,7 +274,7 @@ export function LocationBanner({
       accessibilityLabel={`${label}. ${t.tapToTurnOn}`}
     >
       <View style={s.dot} />
-      <Text style={s.bannerText} numberOfLines={1}>
+      <Text style={s.bannerText} numberOfLines={2}>
         {label} · {t.distancesFromArea}
       </Text>
       <Text style={s.bannerCta}>{t.turnOn}</Text>
@@ -254,6 +284,26 @@ export function LocationBanner({
 
 const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
   StyleSheet.create({
+    updateChip: {
+      position: 'absolute',
+      left: 12,
+      maxWidth: '62%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 34,
+      paddingLeft: 10,
+      borderRadius: 17,
+      backgroundColor: theme.surface,
+      /* Faded, so the map shows through: a reminder, not a blocker. */
+      opacity: 0.88,
+      zIndex: 20,
+      elevation: 4,
+    },
+    updateMain: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    updateTitle: { flexShrink: 1, fontSize: 12.5, fontWeight: '600', color: theme.ink2 },
+    updateAction: { fontSize: 12.5, fontWeight: '800', color: theme.accent },
+    updateClose: { width: 32, height: 34, alignItems: 'center', justifyContent: 'center' },
+    updateCloseText: { fontSize: 13, fontWeight: '600', color: theme.ink3 },
     scrim: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.45)',

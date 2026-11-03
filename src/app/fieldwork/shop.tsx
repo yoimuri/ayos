@@ -7,7 +7,6 @@ import { BrandBar } from '@/components/BrandBar';
 import { PinPicker } from '@/components/PinPicker';
 import { useAppShops, useShops } from '@/lib/data/shops';
 import {
-  FIELDS,
   FIELD_LABEL,
   currentValues,
   locationText,
@@ -20,7 +19,13 @@ import { useLocationGate } from '@/lib/location/useLocationGate';
 import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
 
 /**
- * UPDATE SHOP INFO (field survey mode, developer feature, removed before launch).
+ * PIN EXACT LOCATION (field survey mode, developer feature, removed before launch).
+ *
+ * COORDINATES ONLY (Clint, 1 Nov): the surveyors list each shop's details by hand in the
+ * spreadsheet, so this screen records just where the shop really is. A listed shop shows
+ * only its pin; a new shop also takes its name, so the pin can be matched to the row the
+ * surveyor typed. The export and `import_shops.py --survey` carry the location into the
+ * sheet as before. The model still knows the other columns; this screen no longer edits them.
  *
  * Three uses, one form:
  *   - a shop on the list (`id`): corrections are recorded as edits in the log, each
@@ -74,6 +79,8 @@ export default function FieldShopScreen() {
   const originalLoc = original ? locationText(original.lat, original.lng) : null;
   const currentLoc = added ? locationText(added.lat, added.lng) : isListed ? (edits.location ?? originalLoc) : null;
 
+  /* The only typed column left: a new shop's name, to match the surveyor's spreadsheet row. */
+  const typed: readonly Field[] = isListed ? [] : (['name'] as const);
   const [form, setForm] = useState<Record<Field, string>>(current);
   const set = (f: Field) => (v: string) => setForm((x) => ({ ...x, [f]: v }));
 
@@ -89,7 +96,7 @@ export default function FieldShopScreen() {
   /* A new shop opens on the map: the pin goes on the shop before anything is typed. */
   const [picking, setPicking] = useState(!id);
 
-  const dirty = FIELDS.some((f) => form[f] !== current[f]) || pinMoved;
+  const dirty = typed.some((f) => form[f] !== current[f]) || pinMoved;
 
   /*
     LEAVING WITH UNSAVED WORK ASKS FIRST, whichever way out: the ‹ button or the phone's
@@ -125,7 +132,7 @@ export default function FieldShopScreen() {
   if (isListed && !original) {
     return (
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
-        <BrandBar title="Update shop info" home={false} />
+        <BrandBar title="Pin exact location" home={false} />
         <Text style={[s.help, s.pad]}>This shop is not in the list on this phone.</Text>
       </SafeAreaView>
     );
@@ -146,15 +153,12 @@ export default function FieldShopScreen() {
       fw.updateNewShop(id, form);
       if (pinMoved && pin) fw.moveNewShop(id, pin.lat, pin.lng);
     } else {
-      for (const f of FIELDS) {
-        if (form[f] !== current[f]) fw.edit(id, f, current[f], form[f]);
-      }
       if (pinMoved && pinText && pinText !== currentLoc) fw.edit(id, 'location', currentLoc ?? '', pinText);
     }
     leave();
   };
 
-  const title = !id ? 'Add a shop' : 'Update shop info';
+  const title = !id ? 'Pin a new shop' : 'Pin exact location';
   const locMoved = isListed && (edits.location !== undefined || (pinMoved && pinText !== originalLoc));
 
   if (picking) {
@@ -216,10 +220,13 @@ export default function FieldShopScreen() {
               </Pressable>
             </View>
           )}
-          <Text style={s.original}>Paste these into a maps app to find the spot. Type the address below by hand.</Text>
+          <Text style={s.original}>
+            Stand at the shop entrance and keep the GPS spot, or tap Move pin and put it on the shop. Only the
+            location is recorded here; the shop details go in the spreadsheet.
+          </Text>
         </View>
 
-        {FIELDS.map((f) => {
+        {typed.map((f) => {
           const edited = isListed && edits[f] !== undefined;
           return (
             <View key={f} style={s.field}>

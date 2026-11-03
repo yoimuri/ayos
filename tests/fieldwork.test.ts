@@ -133,7 +133,7 @@ test('my shops: toggles never duplicate, one overall score from three parts', ()
   assert.deepEqual(toggleId(['a', 'b'], 'a'), ['b']);
   assert.equal(overall({ service: 5, price: 4, assistance: 4 }), 4.3);
   assert.equal(isComplete({ service: 5, price: 4 }), false);
-  assert.deepEqual(parsePersonal('broken{'), { saved: [], visited: [], ratings: {} });
+  assert.deepEqual(parsePersonal('broken{'), { saved: [], visited: [], ratings: {}, recent: [] });
 });
 
 test('map pin: coordinates as the sheet writes them, a moved pin drops its GPS accuracy', () => {

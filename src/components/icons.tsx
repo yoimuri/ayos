@@ -1,4 +1,5 @@
 import { Platform, Text, View, type TextStyle } from 'react-native';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 /**
  * The icon set, drawn from a bundled icon font.
@@ -143,12 +144,7 @@ export function SearchIcon({ size = 24, color }: { size?: number; color: string 
   return <Glyph char={GLYPH.search} size={size} color={color} />;
 }
 
-/** "Zoom in on me": closer than recentre, close enough that shops stop clustering. */
-export function ZoomInIcon({ size = 24, color }: { size?: number; color: string }) {
-  return <Glyph char={GLYPH.zoomIn} size={size} color={color} />;
-}
-
-/** The recentre control. A crosshair means "aim at me", which is exactly the request. */
+/** The locate button. A crosshair means "aim at me", which is exactly the request. */
 export function CrosshairIcon({ size = 24, color }: { size?: number; color: string }) {
   return <Glyph char={GLYPH.crosshair} size={size} color={color} />;
 }
@@ -217,5 +213,88 @@ export function ContactIcon({
         <Glyph char={GLYPH.mail} size={size * 0.5} color={color} />
       </View>
     </View>
+  );
+}
+
+/*
+  THE MAP MODE ICONS, drawn with react-native-svg (in the APK from 1.2.0, so these two are
+  not font glyphs). A cube while the map is 3D; a flat square while it is 2D.
+*/
+export function CubeIcon({ size = 24, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round">
+      <Path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" />
+      <Path d="M4 7.5l8 4.5 8-4.5M12 12v9" />
+    </Svg>
+  );
+}
+
+/**
+ * The locate button while the map turns with the phone (compass mode): a navigation arrow,
+ * the shape Google Maps uses for the same mode, so riders already know it.
+ */
+export function CompassIcon({ size = 24, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth={1.5} strokeLinejoin="round">
+      <Path d="M12 3l7 17-7-4-7 4z" />
+    </Svg>
+  );
+}
+
+/**
+ * The compass button's needle: red half to north, grey half to south, the mark Google Maps
+ * uses. Drawn pointing up; the button turns it against the map's turn.
+ */
+export function NeedleIcon({ size = 24 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 2.5l4 9.5H8z" fill="#D93B2B" />
+      <Path d="M12 21.5l-4-9.5h8z" fill="#B9B4AE" />
+    </Svg>
+  );
+}
+
+/** The update card's mark: two turning arrows around a tick, "new version, ready". */
+export function UpdateIcon({ size = 24, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 11a8 8 0 0 0-14.3-4.6M4 13a8 8 0 0 0 14.3 4.6" />
+      <Path d="M5.2 2.8v3.8H9M18.8 21.2v-3.8H15" />
+      <Path d="M8.6 12.2l2.3 2.3 4.5-4.6" />
+    </Svg>
+  );
+}
+
+/** Share: three linked dots, Android's own share mark. */
+export function ShareIcon({ size = 24, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M8.6 10.7l6.8-3.9M8.6 13.3l6.8 3.9" />
+      <Path d="M18 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM6 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM18 15.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+    </Svg>
+  );
+}
+
+/**
+ * MAP ONLY: four corners pointing out ("show me the whole screen"), and pointing in while
+ * the controls are hidden ("bring them back"). The marks phones use for full screen video.
+ */
+export function MapOnlyIcon({ on, size = 24, color }: { on: boolean; size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      {on ? (
+        <Path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+      ) : (
+        <Path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+      )}
+    </Svg>
+  );
+}
+
+export function SquareIcon({ size = 24, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
+      <Rect x={4.5} y={4.5} width={15} height={15} rx={2.2} />
+    </Svg>
   );
 }

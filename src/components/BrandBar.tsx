@@ -19,7 +19,7 @@ import { WORDMARK } from '@/lib/theme/fonts';
  * `theme.bandBg` and `theme.bandInk`, so neither screen file knows the difference.
  */
 
-export function Wordmark({ size = 19 }: { size?: number }) {
+export function Wordmark({ size = 19, color }: { size?: number; color?: string }) {
   const { theme, t } = useSettings();
   return (
     <Text
@@ -32,7 +32,7 @@ export function Wordmark({ size = 19 }: { size?: number }) {
         */
         fontFamily: WORDMARK,
         letterSpacing: -0.3,
-        color: theme.bandInk,
+        color: color ?? theme.bandInk,
       }}
     >
       {t.appName}

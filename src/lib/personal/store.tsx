@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { EMPTY_PERSONAL, parsePersonal, toggleId, type PersonalData, type RatingParts } from './model';
+import { EMPTY_PERSONAL, parsePersonal, pushRecent, toggleId, type PersonalData, type RatingParts } from './model';
 
 /**
  * MY SHOPS, saved on this phone: the shops the rider saved, visited and rated.
@@ -21,6 +21,8 @@ type PersonalApi = {
   /** The rider's own rating of a shop, or undefined. */
   ratingOf: (shopId: string) => (RatingParts & { at: number }) | undefined;
   rate: (shopId: string, parts: RatingParts) => void;
+  /** Called when a shop is opened: it moves to the front of `data.recent`. */
+  markViewed: (shopId: string) => void;
 };
 
 const PersonalContext = createContext<PersonalApi | null>(null);
@@ -43,6 +45,12 @@ export function PersonalProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /* Stable, so a screen can call it from its own callbacks without re-creating them. */
+  const markViewed = useCallback(
+    (id: string) => change((d) => (d.recent[0] === id ? d : { ...d, recent: pushRecent(d.recent, id) })),
+    [change],
+  );
+
   const api = useMemo<PersonalApi>(
     () => ({
       data,
@@ -52,8 +60,9 @@ export function PersonalProvider({ children }: { children: ReactNode }) {
       toggleVisited: (id) => change((d) => ({ ...d, visited: toggleId(d.visited, id) })),
       ratingOf: (id) => data.ratings[id],
       rate: (id, parts) => change((d) => ({ ...d, ratings: { ...d.ratings, [id]: { ...parts, at: Date.now() } } })),
+      markViewed,
     }),
-    [data, change],
+    [data, change, markViewed],
   );
 
   return <PersonalContext.Provider value={api}>{children}</PersonalContext.Provider>;

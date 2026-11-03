@@ -23,10 +23,13 @@ import {
   View,
 } from 'react-native';
 
-import { CrosshairIcon, InfoIcon, ZoomInIcon } from '@/components/icons';
+import { CompassIcon, CrosshairIcon, CubeIcon, InfoIcon, MapOnlyIcon, NeedleIcon, SquareIcon } from '@/components/icons';
+import { frameFor, sizeScale } from '@/features/ride/catalog';
+import { SPRITES, type RideLook } from '@/features/ride/sprites.generated';
 import { useTour, useTourTarget } from '@/components/Tour';
 
 import type { Shop } from '@/lib/data/types';
+import { METRO_MANILA } from '@/lib/geo/coverage';
 import { DETOUR_FACTOR } from '@/lib/geo/distance';
 import { bearingFor, busyUntil, checkResume, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
 import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
@@ -65,6 +68,52 @@ import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
  * background: the oxide pins have to be the loudest thing on it.
  */
 export const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
+/** Dark mode gets OpenFreeMap's own dark style (checked 29 Oct 2026); it has no 3D buildings, we add ours. */
+export const DARK_STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
+/** Each style's first label layer: our buildings go just under it, so street names stay on top. */
+const FIRST_LABEL = { light: 'waterway_line_label', dark: 'water_name' } as const;
+
+/*
+  3D BUILDINGS, KEPT QUIET. The rider and the pins carry the map; buildings only give it
+  depth. Half their real height and a colour close to the ground (design canvas, 30 Oct).
+  `render_height` comes from the same OpenMapTiles data the street map is drawn from.
+*/
+const BUILDING_HEIGHT = 0.5;
+const BUILDING_COLOUR = { light: '#E6DFD4', dark: '#2A2621' } as const;
+
+/** Camera tilt in 3D: a little steeper while following a moving rider. 2D is always 0. */
+const TILT = 48;
+const TILT_RIDING = 55;
+/** Zoomed out past this, the map flattens itself even in 3D: a tilted city is unreadable. */
+const FLAT_BELOW_ZOOM = 12.5;
+
+/** Metres between two [lng, lat] points; plenty accurate across a few hundred metres. */
+function metresBetween(a: [number, number], b: [number, number]): number {
+  const k = 111_320;
+  const dx = (a[0] - b[0]) * k * Math.cos((a[1] * Math.PI) / 180);
+  const dy = (a[1] - b[1]) * k;
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * A STANDING rider's camera ignores moves smaller than this. Indoors or between buildings
+ * a still phone's position wanders 5-20 m; re-centring on each wander swung the whole map,
+ * and a tilted 3D view makes every swing look bigger (Clint, 30 Oct: "fluctuating HARD").
+ * The dot itself still shows the latest filtered position; only the camera holds still.
+ */
+const STILL_CAMERA_DEADBAND_M = 12;
+/** How long without movement before the rider counts as parked for the deadband above. */
+const PARKED_AFTER_MS = 20_000;
+
+/**
+ * The pin picture for a shop: the most useful thing it offers a stranded rider, and whether
+ * it is open. By priority, not by the sheet's tag order: 2,240 shops list accessories first,
+ * which would have put a helmet on nearly every repair shop (checked 30 Oct 2026).
+ */
+const PIN_PRIORITY = ['repair', 'parts', 'dealer', 'accessories'] as const;
+function pinKind(shop: Shop): { cat: string; st: string } {
+  return { cat: PIN_PRIORITY.find((tag) => shop.tags.includes(tag)) ?? 'repair', st: shop.status };
+}
 
 /**
  * OpenStreetMap's licence requires visible credit, and this style ships no `attribution`
@@ -90,14 +139,8 @@ const CLUSTER_MAX_ZOOM = 15;
 /** Screen pixels. Two shops closer together than this on screen become one circle. */
 const CLUSTER_RADIUS_PX = 58;
 
-/**
- * The edge of the world, as far as this app is concerned: [west, south, east, north].
- *
- * Taken from the surveyed data's own extent (lat 14.35-14.78, lng 120.93-121.13) with
- * roughly six kilometres of margin, so a rider standing at the outermost shop can still
- * pan far enough to see where they are going.
- */
-export const METRO_MANILA: [number, number, number, number] = [120.87, 14.30, 121.19, 14.84];
+/** The edge of the world, as far as this app is concerned: lib/geo/coverage.ts. */
+export { METRO_MANILA };
 
 /**
  * Everywhere that is not Metro Manila, as one polygon.
@@ -165,27 +208,104 @@ const AURA = [
 ];
 
 /**
- * Registered once, at module scope, and never rebuilt.
+ * The pins and the heading wedge, defined once at module scope. The rider's bike is added
+ * per look by `riderImages` below.
  *
- * All three are white silhouettes marked `sdf`, so the map treats them as shapes to
- * colour rather than pictures: one file each serves both themes, and symbol layers can
- * give them a halo, which React Native cannot do to a shape at all.
+ * The one marked `sdf` is a white silhouette, so the map treats them as shapes to colour
+ * rather than pictures: one file each serves both themes, and symbol layers can give them
+ * a halo, which React Native cannot do to a shape at all.
  */
 const MAP_IMAGES = {
   'shop-pin': { source: require('../../assets/images/shop-pin.png'), sdf: true },
-  'rider-moto': { source: require('../../assets/images/rider-moto.png'), sdf: true },
-  'rider-detail': { source: require('../../assets/images/rider-detail.png'), sdf: true },
-  'rider-cone': { source: require('../../assets/images/rider-cone.png'), sdf: true },
+  /* Full colour, not sdf: an sdf is one flat colour, and a beam is all fade (docs/design/headlight_beam.py). */
+  'headlight-beam': { source: require('../../assets/images/map/headlight-beam.png') },
+  /* 1.2.0: full-colour pictures (not sdf), drawn at 3x and shown at a third. */
+  'pin-repair-open': { source: require('../../assets/images/map/pin-repair-open.png') },
+  'pin-repair-open-v': { source: require('../../assets/images/map/pin-repair-open-v.png') },
+  'pin-repair-closed': { source: require('../../assets/images/map/pin-repair-closed.png') },
+  'pin-repair-closed-v': { source: require('../../assets/images/map/pin-repair-closed-v.png') },
+  'pin-repair-unknown': { source: require('../../assets/images/map/pin-repair-unknown.png') },
+  'pin-repair-unknown-v': { source: require('../../assets/images/map/pin-repair-unknown-v.png') },
+  'pin-parts-open': { source: require('../../assets/images/map/pin-parts-open.png') },
+  'pin-parts-open-v': { source: require('../../assets/images/map/pin-parts-open-v.png') },
+  'pin-parts-closed': { source: require('../../assets/images/map/pin-parts-closed.png') },
+  'pin-parts-closed-v': { source: require('../../assets/images/map/pin-parts-closed-v.png') },
+  'pin-parts-unknown': { source: require('../../assets/images/map/pin-parts-unknown.png') },
+  'pin-parts-unknown-v': { source: require('../../assets/images/map/pin-parts-unknown-v.png') },
+  'pin-dealer-open': { source: require('../../assets/images/map/pin-dealer-open.png') },
+  'pin-dealer-open-v': { source: require('../../assets/images/map/pin-dealer-open-v.png') },
+  'pin-dealer-closed': { source: require('../../assets/images/map/pin-dealer-closed.png') },
+  'pin-dealer-closed-v': { source: require('../../assets/images/map/pin-dealer-closed-v.png') },
+  'pin-dealer-unknown': { source: require('../../assets/images/map/pin-dealer-unknown.png') },
+  'pin-dealer-unknown-v': { source: require('../../assets/images/map/pin-dealer-unknown-v.png') },
+  'pin-accessories-open': { source: require('../../assets/images/map/pin-accessories-open.png') },
+  'pin-accessories-open-v': { source: require('../../assets/images/map/pin-accessories-open-v.png') },
+  'pin-accessories-closed': { source: require('../../assets/images/map/pin-accessories-closed.png') },
+  'pin-accessories-closed-v': { source: require('../../assets/images/map/pin-accessories-closed-v.png') },
+  'pin-accessories-unknown': { source: require('../../assets/images/map/pin-accessories-unknown.png') },
+  'pin-accessories-unknown-v': { source: require('../../assets/images/map/pin-accessories-unknown-v.png') },
+  sphere: { source: require('../../assets/images/map/sphere.png') },
+  'pin-ring': { source: require('../../assets/images/map/pin-ring.png') },
 };
+
+/**
+ * GRAPHICS: LIGHT, THE CLASSIC LOOK (Clint, 1 Nov): the one picture Light still needs.
+ * Shops, groups of shops, the selected shop and the rider are drawn as plain circles by
+ * the map itself, so none of the 24 pin pictures or the rider's 25 bike pictures are
+ * loaded at all.
+ */
+const LIGHT_IMAGES = {
+  'headlight-beam': { source: require('../../assets/images/map/headlight-beam.png') },
+};
+
+/**
+ * THE RIDER'S BIKE: the look chosen in Your ride, as map images. 24 pictures for 3D
+ * ('rider-<look>-a0' ... '-a23', one every 15 degrees) and one from straight above for 2D.
+ *
+ * THE NAME CARRIES THE LOOK ('scooter-gold'), so a new look is a new name. The map keeps
+ * the first picture it was given under a name and skips any later one with the same name
+ * (MLRNImages.kt: `if (hasImage(imageName, mapInstance)) continue`). With fixed names, Save
+ * in Your ride changed nothing on the map (Clint's phone, 1.3.0).
+ */
+function riderImages(look: RideLook, key: string) {
+  const out: Record<string, { source: number }> = { [`rider-${key}-top`]: { source: look.top } };
+  look.angles.forEach((source, i) => {
+    out[`rider-${key}-a${i}`] = { source };
+  });
+  return out;
+}
 
 /** Stable hitboxes, for the same reason the images are stable. */
 /**
- * How big the rider is drawn, as a fraction of the 256px source.
- *
- * ONE CONSTANT FOR BOTH LAYERS. The bike and the rider detail are separate images drawn
- * on top of one another; if their sizes drift apart the helmet slides off the shoulders.
+ * How big the rider's bike is drawn, as a fraction of its 240 px picture, at size M.
+ * Matched to build 1.2.0 on screen: about 45 px tall in 3D, about 33 px long in 2D.
+ * Your ride's S / M / L multiplies these.
  */
-const RIDER_SIZE = 0.14;
+const BIKE_3D_SIZE = 0.31;
+const BIKE_2D_SIZE = 0.24;
+/**
+ * In the 3D pictures the point where the bike stands sits 48 px below the picture's centre
+ * (the camera looks down at the map's tilt). Lifting the picture by that much puts the
+ * bike's wheels on the rider's position instead of its middle.
+ */
+const BIKE_3D_LIFT = -48;
+
+/**
+ * SMALLER WHEN ZOOMED OUT (Clint, 1 Nov). The rider is sized in screen pixels, so it keeps
+ * its size on screen while the map shrinks under it; at city zoom a 45 px bike covered the
+ * shop groups around it. Full size from street level (zoom 15) in, easing down to 60% at
+ * city level (zoom 11) and staying there, never smaller, so it is always easy to find.
+ * `icon-offset` is scaled by `icon-size`, so the 3D bike's lift shrinks with it.
+ */
+const byZoom = (size: number): ['interpolate', ['linear'], ['zoom'], number, number, number, number] => [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  11,
+  size * 0.6,
+  15,
+  size,
+];
 
 const HITBOX_SMALL = { top: 12, bottom: 12, left: 12, right: 12 };
 const HITBOX_LARGE = { top: 14, bottom: 14, left: 14, right: 14 };
@@ -201,11 +321,18 @@ const SHOP_ZOOM = 15.5;
 const RIDER_ZOOM = 14.5;
 
 /**
- * "Zoom to me" lands here: one level past `CLUSTER_MAX_ZOOM`, the first zoom at which the
- * map stops grouping shops at all, so every shop around the rider is its own pin instead
- * of a numbered circle. About 800 m across on a phone, which is a few blocks each way.
+ * Shop NAMES show from here in: one level past `CLUSTER_MAX_ZOOM`, the first zoom at which
+ * the map stops grouping shops at all. About 800 m across on a phone.
  */
 const MEET_ZOOM = CLUSTER_MAX_ZOOM + 1;
+
+/**
+ * The locate button's first tap lands here (never zooming OUT). It used to be MEET_ZOOM,
+ * which Clint found too close next to Google Maps (31 Oct); this is about the zoom Google
+ * Maps uses, roughly 1.5 km across on a phone, so a few blocks around the rider and the
+ * main roads out of them are in view. Nearby shops still group into counts here.
+ */
+const LOCATE_ZOOM = 15;
 
 
 
@@ -272,13 +399,21 @@ export function RealMap({
    * map's bottom edge is behind it and invisible. Controls are lifted by this instead.
    */
   obscuredBottom = 0,
+  /** Pixels at the TOP covered by the floating search card. */
+  obscuredTop = 0,
   /** True in List mode, when the panel covers the whole map. */
   mapHidden = false,
+  /** Map only: every control hidden but the button that brings them back. */
+  bare = false,
+  onToggleBare,
   visited,
+  recent,
 }: {
   shops: Shop[];
   /** Ids of shops this rider marked Visited; their pins are drawn green. */
   visited?: string[];
+  /** Ids of shops this rider opened lately; their names carry "Recently viewed". */
+  recent?: string[];
   onPressPin: (shop: Shop) => void;
   focus?: { shop: Shop; nonce: number } | null;
   centerBias?: number;
@@ -297,9 +432,40 @@ export function RealMap({
   /** Direction of travel while moving, else null (see useLocationGate). Turns the map. */
   course?: number | null;
   obscuredBottom?: number;
+  obscuredTop?: number;
   mapHidden?: boolean;
+  bare?: boolean;
+  onToggleBare?: () => void;
 }) {
-  const { theme, mapTheme, settings } = useSettings();
+  const { theme, mapTheme, settings, update, t } = useSettings();
+  /*
+    The pin images plus the chosen bike's. A new object only when the bike changes (on Save
+    in Your ride), never per render: see the note on `Images` below.
+  */
+  const riderLook = SPRITES[settings.ride.vehicle][settings.ride.paint];
+  const lookKey = `${settings.ride.vehicle}-${settings.ride.paint}`;
+  const riderImgs = useMemo(() => riderImages(riderLook, lookKey), [riderLook, lookKey]);
+  const light = settings.graphics === 'light';
+  const dark = settings.theme === 'dark';
+  /** The map's own turn, rounded, so the 3D bike knows which picture to show. */
+  const [mapBearing, setMapBearing] = useState(0);
+  /** Zoomed out past FLAT_BELOW_ZOOM: the map is flat there whatever the mode, so the button rests. */
+  const [zoomedOut, setZoomedOut] = useState(false);
+  const zoomedOutRef = useRef(false);
+  /**
+   * COMPASS MODE, the locate button's second tap: while stopped, the map turns with the
+   * phone so the headlight beam points up (lib/map/follow.ts, bearingFor). State for the
+   * button's look; the ref for the camera effects, which outlive a render.
+   */
+  const [compass, setCompassState] = useState(false);
+  const compassOn = useRef(false);
+  const setCompass = (on: boolean) => {
+    compassOn.current = on;
+    setCompassState(on);
+  };
+  /** Where the camera last followed to, for the standing-still deadband. */
+  const lastFollow = useRef<[number, number] | null>(null);
+  const tilt = (riding = false) => (settings.map3d ? (riding ? TILT_RIDING : TILT) : 0);
   /* The recentre button is a step in the tutorial. */
   const recentreRef = useTourTarget('recentre');
   const tour = useTour();
@@ -374,18 +540,49 @@ export function RealMap({
       ROAD AHEAD UP while moving (see bearingFor). Linear, and as long as the glide of the
       rider's dot, so the two move together and the dot stays put on screen.
     */
-    const bearing = bearingFor({ course, lastMovingAt: lastMovingAt.current, now, current: bearingNow.current });
+    const bearing = bearingFor({
+      course,
+      compass: compassOn.current ? heading : null,
+      lastMovingAt: lastMovingAt.current,
+      now,
+      current: bearingNow.current,
+    });
+    const turning = Math.abs(bearing - bearingNow.current) > 1;
+    /*
+      Only for a rider who has really stopped (no movement for 20 s). Crawling in traffic
+      below the 9 km/h "moving" speed still follows every reading; holding the camera there
+      would make the map lag and jump in exactly the place riders are slowest.
+    */
+    const parked = course === null && (lastMovingAt.current === null || now - lastMovingAt.current > PARKED_AFTER_MS);
+    if (parked && !turning && lastFollow.current && metresBetween(lastFollow.current, rider) < STILL_CAMERA_DEADBAND_M) return;
     bearingNow.current = bearing;
-    camera.current?.easeTo({ center: rider, bearing, duration: 900, easing: 'linear' });
+    lastFollow.current = rider;
+    camera.current?.easeTo({ center: rider, bearing, pitch: tilt(course !== null), duration: 900, easing: 'linear' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rider]);
+
+  /*
+    COMPASS MODE while stopped: the compass reports far more often than the GPS, so the map
+    turns here, on each heading, rather than waiting for the next position. Turns under 3
+    degrees are left alone, so a hand's tremor does not keep the map twitching.
+  */
+  useEffect(() => {
+    if (!compassOn.current || heading === null || course !== null || !rider || !everLoaded) return;
+    if (!shouldFollow({ following: following.current, busyUntil: flyingUntil.current, now: Date.now() })) return;
+    if (Math.abs(((((heading - bearingNow.current) % 360) + 540) % 360) - 180) < 3) return;
+    bearingNow.current = heading;
+    camera.current?.easeTo({ center: rider, bearing: heading, duration: 250, easing: 'linear' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heading]);
 
   /* The first GOOD fix, once. The dot is drawn meanwhile; only the camera waits. */
   useEffect(() => {
     if (!rider || openedOnRider.current || !everLoaded || settling) return;
     openedOnRider.current = true;
     fly(900);
-    camera.current?.flyTo({ center: rider, zoom: RIDER_ZOOM, duration: 900 });
+    camera.current?.flyTo({ center: rider, zoom: RIDER_ZOOM, pitch: tilt(), duration: 900 });
+    /* Once, on the first good fix: the tilt is read then, not watched. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rider, everLoaded, settling]);
 
   /*
@@ -410,7 +607,7 @@ export function RealMap({
 
     if (!rider) {
       fly(700);
-      camera.current?.flyTo({ center: shop, zoom: SHOP_ZOOM, duration: 700 });
+      camera.current?.flyTo({ center: shop, zoom: SHOP_ZOOM, pitch: tilt(), duration: 700 });
       return;
     }
 
@@ -423,7 +620,8 @@ export function RealMap({
         Math.max(rider[1], shop[1]),
       ],
       {
-        padding: { top: 70, left: 60, right: 60, bottom: Math.max(80, obscuredBottom * 0.25) },
+        padding: { top: obscuredTop + 40, left: 60, right: 60, bottom: Math.max(80, obscuredBottom * 0.25) },
+        pitch: tilt(),
         duration: 800,
       },
     );
@@ -449,19 +647,37 @@ export function RealMap({
     const lats = shops.map((s) => s.lat);
     camera.current?.fitBounds(
       [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
-      { padding: { top: 60, left: 50, right: 50, bottom: 80 }, duration: 600 },
+      { padding: { top: obscuredTop + 30, left: 50, right: 50, bottom: 80 }, duration: 600 },
     );
+    /* Once (framedAll): the card's height is read then, not watched. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.area, rider, everLoaded, shops]);
 
   /* An outside request to go back to the rider. Ignored on first render. */
   useEffect(() => {
     if (recentreSignal === 0 || !rider || !everLoaded) return;
     resumeFollow();
-    /* Same rule as the button: go there, change nothing else. */
+    /*
+      NO ZOOM GIVEN, DELIBERATELY: go there, change nothing else. Forcing a zoom here once
+      yanked a rider who had zoomed in on their street back out to city scale.
+    */
     fly(700);
-    camera.current?.flyTo({ center: rider, duration: 700 });
+    camera.current?.flyTo({ center: rider, pitch: tilt(), duration: 700 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recentreSignal]);
+
+  /* The cube / square button: tilt into 3D or lay the map flat, where it is now. */
+  const firstMode = useRef(true);
+  useEffect(() => {
+    if (firstMode.current) {
+      firstMode.current = false;
+      return;
+    }
+    if (!everLoaded) return;
+    /* zoomTo at the current zoom: the only camera call that changes the tilt and leaves the centre alone. */
+    camera.current?.zoomTo(zoomNow.current, { pitch: settings.map3d && zoomNow.current >= FLAT_BELOW_ZOOM ? TILT : 0, duration: 500 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.map3d]);
 
   /* Go to the city the rider just picked, framed so the whole of it is visible. */
   useEffect(() => {
@@ -470,32 +686,11 @@ export function RealMap({
     pauseFollow();
     fly(800);
     camera.current?.fitBounds(frame.bounds, {
-      padding: { top: 70, left: 50, right: 50, bottom: Math.max(80, obscuredBottom * 0.25) },
+      padding: { top: obscuredTop + 40, left: 50, right: 50, bottom: Math.max(80, obscuredBottom * 0.25) },
       duration: 800,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame?.nonce, everLoaded]);
-
-  const recentre = () => {
-    if (!rider) return;
-    /*
-      NO ZOOM GIVEN, DELIBERATELY. `flyTo` leaves out what it is not told, so the map
-      keeps whatever scale the rider had set.
-
-      Forcing RIDER_ZOOM here meant someone who had zoomed right in on their street was
-      yanked back out to city scale by a button whose entire job is "put me back in the
-      middle" — it answered WHERE and then silently changed HOW CLOSE as well.
-    */
-    fly(700);
-    camera.current?.flyTo({ center: rider, duration: 700 });
-    resumeFollow();
-    /*
-      And ask for a fresh reading while the camera is moving. The rider pressing this is
-      asking where they actually are, not merely to be shown the last answer again.
-    */
-    onRecentre?.();
-    tour.notify('recentre');
-  };
 
   /*
     THE SHOPS, AS MAP DATA RATHER THAN AS VIEWS.
@@ -513,16 +708,17 @@ export function RealMap({
   */
   const collection = useMemo(() => {
     const seen = new Set(visited ?? []);
+    const lately = new Set(recent ?? []);
     return {
       type: 'FeatureCollection' as const,
       features: shops.map((shop) => ({
         type: 'Feature' as const,
         id: shop.id,
-        properties: { id: shop.id, name: shop.name, visited: seen.has(shop.id) },
+        properties: { id: shop.id, name: shop.name, visited: seen.has(shop.id), recent: lately.has(shop.id), ...pinKind(shop) },
         geometry: { type: 'Point' as const, coordinates: [shop.lng, shop.lat] },
       })),
     };
-  }, [shops, visited]);
+  }, [shops, visited, recent]);
 
   const byId = useMemo(() => new Map(shops.map((shop) => [shop.id, shop])), [shops]);
 
@@ -530,6 +726,7 @@ export function RealMap({
   const focusId = focus?.shop.id;
   const focusLng = focus?.shop.lng;
   const focusLat = focus?.shop.lat;
+  const focusPin = focus ? `pin-${pinKind(focus.shop).cat}-${pinKind(focus.shop).st}` : 'pin-repair-unknown';
   const focusFeature = useMemo(
     () =>
       focusId !== undefined && focusLng !== undefined && focusLat !== undefined
@@ -551,8 +748,8 @@ export function RealMap({
   );
 
   const inset = useMemo(
-    () => ({ bottom: Math.round(400 * (1 - centerBias)) }),
-    [centerBias],
+    () => ({ top: obscuredTop, bottom: Math.round(400 * (1 - centerBias)) }),
+    [centerBias, obscuredTop],
   );
 
   /*
@@ -604,8 +801,49 @@ export function RealMap({
     if (!rider) return;
     resumeFollow();
     fly(800);
-    camera.current?.flyTo({ center: rider, zoom: Math.max(zoomNow.current, MEET_ZOOM), duration: 800 });
+    camera.current?.flyTo({ center: rider, zoom: Math.max(zoomNow.current, LOCATE_ZOOM), pitch: tilt(), duration: 800 });
     onRecentre?.();
+  };
+
+  /*
+    THE COMPASS BUTTON, as in Google Maps: shown only while the map is turned away from
+    north, its needle pointing at north. One tap turns the map back to north up and ends
+    compass mode. While riding, following turns the map to the road again on the next
+    reading, which is what Google Maps does too.
+  */
+  const northUp = () => {
+    setCompass(false);
+    bearingNow.current = 0;
+    fly(400);
+    /* zoomTo at the current zoom: turns the map and leaves the centre alone. */
+    camera.current?.zoomTo(zoomNow.current, { bearing: 0, duration: 400 });
+  };
+
+  /*
+    THE LOCATE BUTTON. "Zoom to me" and "recentre" were two buttons riders could not tell
+    apart (Clint, 31 Oct), so they are one, working like Google Maps' location button:
+      1st tap: back to me at street level (LOCATE_ZOOM), and following again
+               (zoomToMe: never zooms out, so a rider already closer keeps their zoom);
+      2nd tap: compass mode, the map turns with the phone;
+      3rd tap: back to north up (road ahead up while moving).
+    "Already on me" means following and zoomed in at least that far. Dragging or pinching
+    the map pauses following, so the next tap is a first tap again.
+  */
+  const locate = () => {
+    if (!rider) return;
+    tour.notify('recentre');
+    const onMe = following.current && zoomNow.current >= LOCATE_ZOOM - 0.5;
+    if (!onMe) {
+      setCompass(false);
+      zoomToMe();
+      return;
+    }
+    const turnWithPhone = !compassOn.current && heading !== null;
+    setCompass(turnWithPhone);
+    const bearing = turnWithPhone && heading !== null ? heading : (course ?? 0);
+    bearingNow.current = bearing;
+    fly(500);
+    camera.current?.easeTo({ center: rider, bearing, pitch: tilt(course !== null), duration: 500 });
   };
 
   const s = styles(theme);
@@ -614,7 +852,7 @@ export function RealMap({
     <View style={s.wrap}>
       <MapView
         style={s.map}
-        mapStyle={STYLE_URL}
+        mapStyle={dark ? DARK_STYLE_URL : STYLE_URL}
         /*
           Pushes the map's optical centre upward by however much the sheet covers, so a
           shop the camera flies to does not land underneath the list.
@@ -623,13 +861,12 @@ export function RealMap({
         attribution={false}
         logo={false}
         /*
-          NO TWISTING WITH TWO FINGERS. The app turns the map itself: road ahead up while
-          following a moving rider, back to north once they have been stopped a while
-          (lib/map/follow.ts). A rider who twisted it by accident would have no way to
-          straighten it. The rider's arrow and cone are symbol layers aligned to the MAP,
-          so they stay correct whichever way the map is turned.
+          TWO FINGERS TURN THE MAP, as in Google Maps (Clint, 31 Oct). It was switched off
+          while nothing could turn it back; the compass button now does (it appears as soon
+          as the map is turned, and one tap puts north up). Turning by hand pauses
+          following like any other touch (lib/map/follow.ts).
         */
-        touchRotate={false}
+        touchRotate
         /*
           A press that reached the map rather than a pin means the rider tapped empty
           space, which is how every maps app says "never mind". Without it a selected
@@ -644,12 +881,29 @@ export function RealMap({
         */
         onRegionWillChange={(e) => {
           if (!e.nativeEvent.userInteraction) return;
+          /*
+            Taking the map by hand ends compass mode, as in Google Maps. Opening a shop or
+            picking a city only pauses it: the map turns with the phone again when
+            following comes back.
+          */
+          if (compassOn.current) setCompass(false);
           if (following.current || !pause.current) pauseFollow();
           else pause.current = { ...pause.current, lastTouchAt: Date.now() };
         }}
         onRegionDidChange={(e) => {
           zoomNow.current = e.nativeEvent.zoom;
           bearingNow.current = e.nativeEvent.bearing;
+          setMapBearing(Math.round(e.nativeEvent.bearing / 10) * 10);
+          const out = e.nativeEvent.zoom < FLAT_BELOW_ZOOM;
+          if (out && e.nativeEvent.pitch > 2) camera.current?.zoomTo(e.nativeEvent.zoom, { pitch: 0, duration: 400 });
+          /* Back in from the whole-city view: 3D tilts again by itself, no tap needed. */
+          if (!out && zoomedOutRef.current && settings.map3d && e.nativeEvent.pitch < 2) {
+            camera.current?.zoomTo(e.nativeEvent.zoom, { pitch: TILT, duration: 450 });
+          }
+          if (out !== zoomedOutRef.current) {
+            zoomedOutRef.current = out;
+            setZoomedOut(out);
+          }
           if (e.nativeEvent.userInteraction && pause.current) pause.current = { ...pause.current, lastTouchAt: Date.now() };
         }}
         /* A style that will not load leaves the spinner forever otherwise. */
@@ -667,7 +921,14 @@ export function RealMap({
           One component rather than two for the same reason — two registries writing to
           one style is a race nobody needs.
         */}
-        <Images images={MAP_IMAGES} />
+        <Images images={light ? LIGHT_IMAGES : MAP_IMAGES} />
+        {/*
+          The rider's pictures on their own, keyed by the look: on Save the old set's
+          component goes away, and with it its 25 pictures (MLRNImages removes its own
+          images when it leaves the map), instead of every look tried piling up in memory.
+          None in Light: the rider is a plain dot there.
+        */}
+        {!light && <Images key={lookKey} images={riderImgs} />}
 
         {/*
           EVERY LAYER CARRIES A KEY, AND THAT IS A CRASH FIX, NOT TIDINESS.
@@ -705,6 +966,26 @@ export function RealMap({
           */
           maxZoom={20}
         />
+
+        {/* Only once the style has loaded: this layer reads the style's own `openmaptiles` source. */}
+        {settings.map3d && everLoaded && (
+          <Layer
+            key="ayoos-buildings"
+            id="ayoos-buildings"
+            type="fill-extrusion"
+            source="openmaptiles"
+            source-layer="building"
+            minzoom={14}
+            beforeId={dark ? FIRST_LABEL.dark : FIRST_LABEL.light}
+            filter={['!', ['has', 'hide_3d']]}
+            paint={{
+              'fill-extrusion-color': dark ? BUILDING_COLOUR.dark : BUILDING_COLOUR.light,
+              'fill-extrusion-height': ['*', ['coalesce', ['get', 'render_height'], 0], BUILDING_HEIGHT],
+              'fill-extrusion-base': ['*', ['coalesce', ['get', 'render_min_height'], 0], BUILDING_HEIGHT],
+              'fill-extrusion-opacity': 0.6,
+            }}
+          />
+        )}
 
         {/*
           OUR OWN PUCK, not MapLibre's `UserLocation`.
@@ -805,19 +1086,43 @@ export function RealMap({
             continuous, so the sizes read as a few distinct classes instead of a smear
             where every circle is slightly different from its neighbour.
           */}
+          {light ? (
+            /* Light: a plain circle, a little bigger for bigger groups. */
+            <Layer
+              key="shop-cluster-dot"
+              id="shop-cluster-dot"
+              type="circle"
+              filter={['has', 'point_count']}
+              paint={{
+                'circle-radius': ['step', ['get', 'point_count'], 11, 20, 14, 100, 17],
+                'circle-color': mapTheme.accent,
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 1.5,
+              }}
+            />
+          ) : (
           <Layer
-              key="shop-cluster"
-              id="shop-cluster"
-            type="circle"
+            key="shop-cluster"
+            id="shop-cluster"
+            type="symbol"
             filter={['has', 'point_count']}
-            paint={{
-              'circle-color': mapTheme.accent,
-              'circle-opacity': 0.92,
-              'circle-radius': ['step', ['get', 'point_count'], 15, 10, 20, 50, 26, 200, 32],
-              'circle-stroke-width': 2,
-              'circle-stroke-color': mapTheme.onFilled,
+            layout={{
+              'icon-image': 'sphere',
+              /*
+                SMALL WHEN ZOOMED OUT (design canvas, 30 Oct): a group grows slowly with its
+                count and the whole set shrinks as the map zooms out, so the city reads first
+                and the numbers second. The sphere picture is 96 px across at 1x.
+              */
+              'icon-size': [
+                'interpolate', ['linear'], ['zoom'],
+                10, ['interpolate', ['linear'], ['get', 'point_count'], 2, 0.17, 100, 0.24, 500, 0.29],
+                14, ['interpolate', ['linear'], ['get', 'point_count'], 2, 0.26, 100, 0.32, 500, 0.36],
+              ],
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
             }}
           />
+          )}
 
           <Layer
               key="shop-cluster-count"
@@ -828,29 +1133,63 @@ export function RealMap({
               /* `_abbreviated` turns 1,240 into "1.2k" so a big cluster still fits. */
               'text-field': ['get', 'point_count_abbreviated'],
               'text-font': LABEL_FONT,
-              'text-size': 12,
+              'text-size': ['interpolate', ['linear'], ['zoom'], 10, 9.5, 14, 12],
+              'text-offset': [0, -0.15],
               /* Counts must never be dropped for overlapping: a circle with no number
                  on it looks like a shop, which is exactly the wrong reading. */
               'text-allow-overlap': true,
               'text-ignore-placement': true,
             }}
-            paint={{ 'text-color': mapTheme.onFilled }}
+            paint={{ 'text-color': '#FFFFFF', 'text-halo-color': 'rgba(60,20,10,0.55)', 'text-halo-width': 1 }}
           />
 
           {/* A single shop, once it is no longer part of a cluster. */}
+          {light ? (
+            /*
+              Light: a dot. Green open, grey closed, pale when unknown; a green ring says this
+              rider visited.
+            */
+            <Layer
+              key="shop-dot"
+              id="shop-dot"
+              type="circle"
+              filter={['!', ['has', 'point_count']]}
+              paint={{
+                'circle-radius': 6.5,
+                'circle-color': [
+                  'match', ['get', 'st'],
+                  'open', mapTheme.open,
+                  'closed', mapTheme.ink3,
+                  mapTheme.accent,
+                ],
+                'circle-stroke-color': ['case', ['==', ['get', 'visited'], true], mapTheme.open, '#FFFFFF'],
+                'circle-stroke-width': ['case', ['==', ['get', 'visited'], true], 3, 1.5],
+              }}
+            />
+          ) : (
           <Layer
-              key="shop-point"
-              id="shop-point"
-            type="circle"
+            key="shop-point"
+            id="shop-point"
+            type="symbol"
             filter={['!', ['has', 'point_count']]}
-            paint={{
-              /* VISITED shops are green (the "open" colour), the rest the usual accent. */
-              'circle-color': ['case', ['==', ['get', 'visited'], true], mapTheme.open, mapTheme.accent],
-              'circle-radius': 7,
-              'circle-stroke-width': 2,
-              'circle-stroke-color': mapTheme.onFilled,
+            layout={{
+              /*
+                PINS, NOT DOTS. The glyph says what the shop fixes; a green dot says open;
+                grey says closed; a check says this rider visited. Pictures are pin-<kind>-
+                <status>[-v], drawn at 3x; a third of that is the size on screen.
+              */
+              'icon-image': [
+                'concat', 'pin-', ['get', 'cat'], '-', ['get', 'st'],
+                ['case', ['==', ['get', 'visited'], true], '-v', ''],
+              ],
+              'icon-size': 0.34,
+              /* The tip is the shop. The picture has 4 px of shadow under the tip. */
+              'icon-anchor': 'bottom',
+              'icon-offset': [0, 12],
+              'icon-allow-overlap': true,
             }}
           />
+          )}
 
           {/*
             SHOP NAMES, ONLY WHEN ZOOMED IN. From
@@ -867,11 +1206,17 @@ export function RealMap({
             minzoom={MEET_ZOOM}
             filter={['!', ['has', 'point_count']]}
             layout={{
-              'text-field': ['get', 'name'],
+              /* A shop opened lately gets a smaller second line, as in Google Maps. */
+              'text-field': [
+                'case',
+                ['==', ['get', 'recent'], true],
+                ['format', ['get', 'name'], {}, `\n${t.recentlyViewed}`, { 'font-scale': 0.85 }],
+                ['get', 'name'],
+              ],
               'text-font': ['Noto Sans Regular'],
               'text-size': 12,
               'text-anchor': 'top',
-              'text-offset': [0, 0.9],
+              'text-offset': [0, 0.5],
               'text-max-width': 9,
               'text-optional': true,
             }}
@@ -909,21 +1254,53 @@ export function RealMap({
             hitbox={HITBOX_LARGE}
           >
 
+            {/* Light: a bigger dot with a thick white ring. Each layer a direct child of the
+               source (no fragment), which is how the source hands its layers their data. */}
+            {light && (
+              <Layer
+                key="selected-dot"
+                id="selected-dot"
+                type="circle"
+                paint={{
+                  'circle-radius': 10,
+                  'circle-color': mapTheme.accent,
+                  'circle-stroke-color': '#FFFFFF',
+                  'circle-stroke-width': 3,
+                }}
+              />
+            )}
+            {!light && (
+            <Layer
+              key="selected-ring"
+              id="selected-ring"
+              type="symbol"
+              layout={{
+                'icon-image': 'pin-ring',
+                'icon-size': 0.45,
+                /* Lying on the road, under the pin. */
+                'icon-pitch-alignment': 'map',
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true,
+              }}
+            />
+            )}
+            {!light && (
             <Layer
               key="selected-pin"
               id="selected-pin"
               type="symbol"
               layout={{
-                'icon-image': 'shop-pin',
-                'icon-size': 0.42,
+                'icon-image': focusPin,
+                'icon-size': 0.46,
                 /* Anchored at its point, which is where the shop actually is. */
                 'icon-anchor': 'bottom',
+                'icon-offset': [0, 12],
                 /* Never dropped for overlapping: the whole job is to be seen. */
                 'icon-allow-overlap': true,
                 'icon-ignore-placement': true,
               }}
-              paint={{ 'icon-color': mapTheme.ink }}
             />
+            )}
           </GeoJSONSource>
         )}
 
@@ -937,7 +1314,7 @@ export function RealMap({
 
           Everything here rotates together because everything reads the same `heading`,
           and `icon-rotate` turns an icon about its own anchor — which sits exactly on the
-          rider. The cone image has its apex at the centre of its own square for that
+          rider. The beam image has its apex at the centre of its own square for that
           reason: rotating it sweeps the wedge around the rider rather than orbiting it.
 
           `circle-radius` and icon sizes are SCREEN pixels, not metres, so the whole mark
@@ -949,7 +1326,16 @@ export function RealMap({
           (several redraws a second while riding) redraws only the rider, not the whole
           map with its two thousand shops.
         */}
-        <RiderMark rider={rider} heading={heading} riderLive={riderLive} glide={course != null} />
+        <RiderMark
+          rider={rider}
+          heading={heading}
+          riderLive={riderLive}
+          glide={course != null && !light}
+          light={light}
+          frame={settings.map3d && !zoomedOut ? frameFor(heading, mapBearing) : null}
+          look={lookKey}
+          scale={sizeScale(settings.ride.size)}
+        />
 
       </MapView>
 
@@ -962,30 +1348,71 @@ export function RealMap({
         Also absent while the map is hidden behind the list, so nothing (the tutorial
         included) can point at a button nobody can see.
       */}
-      {rider && !mapHidden && (
+      {!mapHidden && !bare && !light && (
         <Pressable
-          onPress={zoomToMe}
-          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + 64 }, pressed && s.pressed]}
+          onPress={() => update({ map3d: !settings.map3d })}
+          /*
+            RESTING when zoomed out to the whole city: the map is flat there in either mode,
+            so a tap changed nothing visible and read as broken (Clint, 30 Oct). It wakes as
+            soon as the rider zooms back in.
+          */
+          disabled={zoomedOut}
+          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + (rider ? 68 : 14) }, pressed && s.pressed, zoomedOut && s.resting]}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Zoom in on my location"
+          accessibilityState={{ disabled: zoomedOut }}
+          accessibilityLabel={settings.map3d ? t.view2d : t.view3d}
         >
-          <View style={s.locOuter}>
-            <ZoomInIcon size={22} color={theme.ink} />
+          {/* A cube while 3D; a flat square, on a filled button, while 2D. */}
+          <View style={[s.locOuter, !settings.map3d && s.locOuterOn]}>
+            {settings.map3d ? <CubeIcon size={21} color={theme.ink} /> : <SquareIcon size={20} color={theme.bg} />}
           </View>
         </Pressable>
       )}
-      {rider && !mapHidden && (
+      {/*
+        MAP ONLY (Clint, 31 Oct): hides the search, the chips, the notices, the shop panel
+        and the other map buttons, to look at the map alone; the same button, or Back,
+        brings everything back. The map credit stays: the licence requires it visible.
+      */}
+      {!mapHidden && onToggleBare && !light && (
         <Pressable
-          ref={recentreRef}
-          onPress={recentre}
-          style={[s.locBtn, { bottom: obscuredBottom + 14 }]}
+          onPress={onToggleBare}
+          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + (bare ? 14 : rider ? 122 : 68) }, pressed && s.pressed]}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Centre the map on my location"
+          accessibilityLabel={bare ? 'Show the controls again' : 'Show only the map'}
         >
-          <View style={s.locOuter}>
-            <CrosshairIcon size={21} color={theme.ink} />
+          <View style={[s.locOuter, bare && s.locOuterOn]}>
+            <MapOnlyIcon on={bare} size={21} color={bare ? theme.bg : theme.ink} />
+          </View>
+        </Pressable>
+      )}
+      {!mapHidden && !bare && mapBearing % 360 !== 0 && (
+        <Pressable
+          onPress={northUp}
+          style={({ pressed }) => [s.compassBtn, light && s.flat, { top: obscuredTop + 18 }, pressed && s.pressed]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Turn the map to north up"
+        >
+          <View style={{ transform: [{ rotate: `${-mapBearing}deg` }] }}>
+            <NeedleIcon size={22} />
+          </View>
+        </Pressable>
+      )}
+      {rider && !mapHidden && !bare && (
+        <Pressable
+          ref={recentreRef}
+          onPress={locate}
+          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + 14 }, pressed && s.pressed]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityState={{ selected: compass }}
+          accessibilityLabel={compass ? 'Turn the map back to north' : 'Go to my location'}
+        >
+          {/* A crosshair; a filled arrow while the map turns with the phone. */}
+          <View style={[s.locOuter, light && s.flat, compass && s.locOuterOn]}>
+            {compass ? <CompassIcon size={21} color={theme.bg} /> : <CrosshairIcon size={21} color={theme.ink} />}
           </View>
         </Pressable>
       )}
@@ -1067,23 +1494,47 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       shifting grip, and the top right is where the notice banner lives. Above the
       attribution, which is a licence term and must not be covered.
     */
-    locBtn: { position: 'absolute', left: 12 },
+    /*
+      Bottom RIGHT, as in Google Maps (Clint, 31 Oct): under a right thumb, and where
+      riders who use Google Maps already reach for the locate button.
+    */
+    locBtn: { position: 'absolute', right: 14 },
     pressed: { opacity: 0.6 },
+    /* Floating over the map: round, lifted by a soft shadow, no outline. */
     locOuter: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       backgroundColor: theme.surface,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: theme.line,
-      elevation: 3,
-      shadowColor: '#000',
-      shadowOpacity: 0.16,
-      shadowRadius: 4,
-      shadowOffset: { width: 0, height: 1 },
+      elevation: 5,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.18,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
     },
+    /* The 2D button is filled, so the non-default mode is obvious at a glance. */
+    locOuterOn: { backgroundColor: theme.ink },
+    /* Graphics: Light. No shadow (cheaper to draw), a thin outline instead. */
+    flat: { elevation: 0, shadowOpacity: 0, borderWidth: 1, borderColor: theme.line },
+    /* Under the help button, the same size, on the same right-hand edge (index.tsx floatTop). */
+    compassBtn: {
+      position: 'absolute',
+      right: 14,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 5,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.14,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    resting: { opacity: 0.4 },
 
 
 
@@ -1108,12 +1559,12 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       hidden behind a panel is not visible.
     */
     /*
-      Bottom RIGHT, opposite the recentre button. Both corners are reachable, and the one
-      the rider presses often should not share a corner with the one they press never.
+      Bottom LEFT, opposite the locate button. The corner the rider presses often should
+      not share a corner with the one they press never.
     */
     attrib: {
       position: 'absolute',
-      right: 12,
+      left: 12,
       width: 24,
       height: 24,
       borderRadius: 12,
@@ -1170,11 +1621,23 @@ function RiderMark({
   heading,
   riderLive,
   glide,
+  frame,
+  look,
+  scale,
+  light = false,
 }: {
   rider: [number, number] | null;
   heading: number | null;
   riderLive: boolean;
   glide: boolean;
+  /** Which of the 24 bike pictures fits the map's turn in 3D, or null for the 2D bike from above. */
+  frame: number | null;
+  /** Which Your ride look's pictures to use: see `riderImages`. */
+  look: string;
+  /** Your ride's size: S, M or L as a multiple of the default. */
+  scale: number;
+  /** Graphics: Light. One glow ring instead of five. */
+  light?: boolean;
 }) {
   const { mapTheme } = useSettings();
   const drawn = useGlide(rider, glide);
@@ -1197,7 +1660,7 @@ function RiderMark({
           neither can a style layer, so a soft edge is built by accumulating faint
           ones. Fewer, larger steps band into visible rings instead of glowing.
         */}
-        {AURA.map(({ size: ring, opacity }) => (
+        {(light ? AURA.slice(2, 3) : AURA).map(({ size: ring, opacity }) => (
           <Layer
             key={ring}
             id={`rider-aura-${ring}`}
@@ -1210,32 +1673,80 @@ function RiderMark({
           />
         ))}
 
-        {/* Which way the phone is pointing. Absent entirely until the compass reports. */}
+        {/*
+          THE HEADLIGHT BEAM: which way the phone is pointing, drawn as a warm fan of light
+          that fades with distance, not a flat cone (Clint, 31 Oct). Laid flat on the map
+          (`pitch-alignment: map`), so in 3D it lies on the road ahead of the bike like real
+          headlight on tarmac. Absent entirely until the compass reports.
+        */}
         {heading !== null && (
           <Layer
-          key="rider-cone"
-          id="rider-cone"
+            key="rider-beam"
+            id="rider-beam"
             type="symbol"
             layout={{
-              'icon-image': 'rider-cone',
-              'icon-size': 0.42,
+              'icon-image': 'headlight-beam',
+              'icon-size': byZoom(0.62),
               'icon-rotate': heading,
               'icon-rotation-alignment': 'map',
+              'icon-pitch-alignment': 'map',
               'icon-allow-overlap': true,
               'icon-ignore-placement': true,
             }}
-            paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 0.26 : 0.12 }}
+            paint={{ 'icon-opacity': riderLive ? 1 : 0.45 }}
           />
         )}
 
 
+        {/*
+          3D: the bike from the Blender model, the picture for the rider's direction relative
+          to the map, standing up toward the camera. While riding the map turns with the rider,
+          so this is the bike seen from behind.
+        */}
+        {frame !== null && (
+          <Layer
+            key="rider-bike3d"
+            id="rider-bike3d"
+            type="symbol"
+            layout={{
+              'icon-image': `rider-${look}-a${frame}`,
+              'icon-size': byZoom(BIKE_3D_SIZE * scale),
+              'icon-offset': [0, BIKE_3D_LIFT],
+              'icon-pitch-alignment': 'viewport',
+              'icon-rotation-alignment': 'viewport',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            }}
+            paint={{ 'icon-opacity': riderLive ? 1 : 0.5 }}
+          />
+        )}
+
+        {/* Light: the rider is a plain dot with a white ring, the classic location mark. */}
+        {light && (
+          <Layer
+            key="rider-dot"
+            id="rider-dot"
+            type="circle"
+            paint={{
+              'circle-radius': byZoom(8),
+              'circle-color': mapTheme.accent,
+              'circle-stroke-color': '#FFFFFF',
+              'circle-stroke-width': 3,
+              'circle-opacity': riderLive ? 1 : 0.5,
+              'circle-stroke-opacity': riderLive ? 1 : 0.5,
+            }}
+          />
+        )}
+
+        {/* 2D: the same bike from straight above, turned with the heading. */}
+        {frame === null && !light && (
         <Layer
-          key="rider-moto"
-          id="rider-moto"
+          key="rider-top"
+          id="rider-top"
           type="symbol"
           layout={{
-            'icon-image': 'rider-moto',
-            'icon-size': RIDER_SIZE,
+            'icon-image': `rider-${look}-top`,
+            'icon-size': byZoom(BIKE_2D_SIZE * scale),
             /*
               Points north until the compass reports. A motorcycle has to point
               somewhere, and north is the one direction that is not a claim.
@@ -1245,34 +1756,10 @@ function RiderMark({
             'icon-allow-overlap': true,
             'icon-ignore-placement': true,
           }}
-          paint={{ 'icon-color': mapTheme.accent, 'icon-opacity': riderLive ? 1 : 0.5 }}
+          paint={{ 'icon-opacity': riderLive ? 1 : 0.5 }}
         />
+        )}
 
-        {/*
-          THE RIDER, PICKED OUT OF THE MACHINE.
-
-          One flat silhouette made the helmet and shoulders merge into the tank, so it
-          read as a shape rather than a person on a bike. A second image in the light
-          colour — a ring around the helmet and a line under the shoulders — separates
-          them without adding a third colour to the map.
-
-          Same size and same rotation as the bike, from the same constants, because
-          two images stacked on each other must agree exactly or the helmet drifts.
-        */}
-        <Layer
-          key="rider-detail"
-          id="rider-detail"
-          type="symbol"
-          layout={{
-            'icon-image': 'rider-detail',
-            'icon-size': RIDER_SIZE,
-            'icon-rotate': heading ?? 0,
-            'icon-rotation-alignment': 'map',
-            'icon-allow-overlap': true,
-            'icon-ignore-placement': true,
-          }}
-          paint={{ 'icon-color': mapTheme.onFilled, 'icon-opacity': riderLive ? 1 : 0.5 }}
-        />
       </GeoJSONSource>
   );
 }

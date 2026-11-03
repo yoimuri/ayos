@@ -82,11 +82,23 @@ export function checkResume(p: Pause, course: number | null, now: number): { res
   like a satnav. Stopped, it keeps its last turn for PARKED_MS (a red light should not
   spin the map) and then eases back to north, which is how a map reads best when someone
   is browsing it.
+
+  COMPASS MODE (the locate button's second tap): stopped, the map turns with the phone, so
+  the headlight beam points up. Moving, the road ahead still wins: the GPS direction of
+  travel is steadier than a compass on a handlebar mount.
 */
 export const PARKED_MS = 20_000;
 
-export function bearingFor(s: { course: number | null; lastMovingAt: number | null; now: number; current: number }): number {
+export function bearingFor(s: {
+  course: number | null;
+  /** The phone's heading while compass mode is on, else null. */
+  compass?: number | null;
+  lastMovingAt: number | null;
+  now: number;
+  current: number;
+}): number {
   if (s.course !== null) return s.course;
+  if (s.compass != null) return s.compass;
   if (s.lastMovingAt !== null && s.now - s.lastMovingAt < PARKED_MS) return s.current;
   return 0;
 }

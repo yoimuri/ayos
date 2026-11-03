@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { cleanRide, DEFAULT_RIDE, type Ride } from '@/features/ride/catalog';
 import { STRINGS, type Language, type Strings } from '@/lib/i18n/strings';
 import type { RiderSurvey } from '@/lib/survey/questions';
 import { PALETTES, type PaletteName, type Theme, type ThemeName } from '@/lib/theme/tokens';
@@ -105,6 +106,29 @@ export type Settings = {
   fieldMode: boolean;
   /** A heads-up while riding when a shop is just ahead (lib/nearby/ahead.ts). */
   shopAlerts: boolean;
+  /**
+   * The map tilts and draws buildings in 3D. Off is the flat 2D map seen from straight
+   * above. Switched by the cube / square button on the map. NOT carried over to the next
+   * launch: the app opens in 2D every time, and 3D is the rider's choice for that session
+   * (Clint, 30 Oct: the lightest start, on every phone).
+   */
+  map3d: boolean;
+  /** The bike drawn on the map: vehicle, paint and size, chosen in Your ride. */
+  ride: Ride;
+  /**
+   * GRAPHICS (Clint, 31 Oct / 1 Nov): Standard is the app as designed. Light is THE
+   * CLASSIC LOOK: basic functions only (map, list, search, call, text, directions, saved)
+   * in a plain UI that almost any phone can carry. In Light:
+   *   - the map is 2D only (no 3D, no cube button);
+   *   - shops, groups and the selected shop are plain dots, and the rider a plain dot with
+   *     one glow ring and the headlight beam, no gliding (RealMap): no pin or bike
+   *     pictures are loaded at all;
+   *   - no shop-type chips, no map-only button, no Your ride (index, RealMap, settings);
+   *   - cards and buttons are flat, without shadows.
+   * Switching either way asks to restart (settings.tsx). Your ride keeps its own Light
+   * handling (small pictures, no spin, still road) in case it is reached anyway.
+   */
+  graphics: 'standard' | 'light';
 };
 
 const DEFAULTS: Settings = {
@@ -121,6 +145,9 @@ const DEFAULTS: Settings = {
   searchHidden: false,
   fieldMode: false,
   shopAlerts: true,
+  map3d: false,
+  ride: DEFAULT_RIDE,
+  graphics: 'standard',
 };
 
 /**
@@ -173,7 +200,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (saved.area && !(saved.area in AREA_LABELS)) {
           saved.area = OLD_AREAS[saved.area] ?? null;
         }
-        setSettings({ ...DEFAULTS, ...saved });
+        /* 2D on every launch, whatever was saved; and a ride from an older version is checked. */
+        setSettings({
+          ...DEFAULTS,
+          ...saved,
+          map3d: false,
+          ride: cleanRide(saved.ride),
+          graphics: saved.graphics === 'light' ? 'light' : 'standard',
+        });
       })
       .catch(() => {
         // Unreadable or corrupt storage falls back to defaults rather than crashing

@@ -1,10 +1,11 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import { ContactCard } from '@/components/ContactCard';
 import { ReviewList } from '@/components/ReviewList';
-import { ChatIcon, EditIcon, NavIcon, PhoneIcon, SavedIcon, VisitedIcon } from '@/components/icons';
+import { ChatIcon, EditIcon, NavIcon, PhoneIcon, SavedIcon, ShareIcon, VisitedIcon } from '@/components/icons';
 import { useTourTarget } from '@/components/Tour';
 import { clockLabel, isAllDay, type Hours } from '@/lib/data/hours';
 import type { Shop } from '@/lib/data/types';
@@ -138,8 +139,8 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
   return (
     <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
       {/*
-        Circles with the word beneath. Only Call is filled, so the primary action is
-        obvious. With no number the contact buttons are not drawn at all: a disabled
+        Raised tiles with the word beneath (1.2.0 design). Only Call is filled, so the
+        primary action is obvious. With no number the contact buttons are not drawn at all: a disabled
         button still looks like a control, and a rider who taps it and gets nothing
         concludes the app is broken.
       */}
@@ -148,14 +149,14 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
           <>
             <Pressable
               onPress={() => reach('tel')}
-              style={({ pressed }) => [s.actWrap, pressed && s.pressed]}
+              style={({ pressed }) => [s.actWrap, s.actWrapFilled, pressed && s.pressed]}
               accessibilityRole="button"
               accessibilityLabel={t.call}
             >
-              <View style={[s.actCircle, s.actFilled]}>
+              <View style={s.actCircle}>
                 <PhoneIcon size={23} color={theme.onFilled} />
               </View>
-              <Text style={s.actLabel}>{t.call}</Text>
+              <Text style={[s.actLabel, s.actLabelOn]}>{t.call}</Text>
             </Pressable>
 
             <Pressable
@@ -164,7 +165,7 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
               accessibilityRole="button"
               accessibilityLabel={t.message}
             >
-              <View style={[s.actCircle, s.actOutline]}>
+              <View style={s.actCircle}>
                 <ChatIcon size={23} color={theme.ink} />
               </View>
               <Text style={s.actLabel}>{t.message}</Text>
@@ -180,10 +181,27 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
           accessibilityRole="button"
           accessibilityLabel={t.directions}
         >
-          <View style={[s.actCircle, s.actOutline]}>
+          <View style={s.actCircle}>
             <NavIcon size={23} color={theme.ink} />
           </View>
           <Text style={s.actLabel}>{t.directions}</Text>
+        </Pressable>
+
+        {/*
+          SHARE, as in Google Maps: the phone's own share sheet (Messenger, SMS, anything),
+          with the name, address, number and a Google Maps link, so whoever receives it can
+          get there without the app. React Native's built-in Share: no new APK.
+        */}
+        <Pressable
+          onPress={() => void Share.share({ message: shareText(shop) })}
+          style={({ pressed }) => [s.actWrap, pressed && s.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={t.share}
+        >
+          <View style={s.actCircle}>
+            <ShareIcon size={22} color={theme.ink} />
+          </View>
+          <Text style={s.actLabel}>{t.share}</Text>
         </Pressable>
       </View>
 
@@ -213,8 +231,8 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
       </View>
 
       {/*
-        FIELD SURVEY MODE (developer feature, removed before launch): the surveyor corrects
-        this shop's details. Shown only with the mode on.
+        FIELD SURVEY MODE (developer feature, removed before launch): the surveyor records
+        this shop's exact location, nothing else (fieldwork/shop.tsx). Shown only with the mode on.
       */}
       {settings.fieldMode && (
         <Pressable
@@ -224,7 +242,7 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
         >
           <EditIcon size={20} color={theme.bg} />
           <Text style={s.surveyBtnText}>
-            Update shop info{shop.isNew ? ' · added by you' : shop.edited ? ' · edited on this phone' : ''}
+            Pin exact location{shop.isNew ? ' · added by you' : shop.edited ? ' · pinned on this phone' : ''}
           </Text>
         </Pressable>
       )}
@@ -242,9 +260,7 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
         only from the team or with the shop's permission ; none have been
         taken, so the box says so.
       */}
-      <View style={s.photo}>
-        <Text style={s.photoNote}>{t.noPhotoYet}</Text>
-      </View>
+      <PhotoStrip photos={[]} />
 
       {shop.tags.length > 0 && (
         <View style={s.tagRow}>
@@ -373,6 +389,52 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
   );
 }
 
+/**
+ * A shop's photos: three, then a fourth tile reading "+N" when there are more than four;
+ * exactly four show all four (Clint, 30 Oct 2026). Empty until photos are hosted, and then
+ * the shop data carries their addresses. expo-image caches them on the phone.
+ */
+function PhotoStrip({ photos, onOpen }: { photos: string[]; onOpen?: (index: number) => void }) {
+  const { theme, t } = useSettings();
+  const s = styles(theme);
+  if (photos.length === 0) {
+    return (
+      <View style={s.photo}>
+        <Text style={s.photoNote}>{t.noPhotoYet}</Text>
+      </View>
+    );
+  }
+  const shown = photos.length > 4 ? photos.slice(0, 4) : photos;
+  const more = photos.length > 4 ? photos.length - 3 : 0;
+  return (
+    <View style={s.photoRow}>
+      {shown.map((uri, i) => (
+        <Pressable key={uri} onPress={() => onOpen?.(i)} style={s.photoTile} accessibilityRole="imagebutton"
+          accessibilityLabel={more && i === 3 ? t.morePhotos(more) : t.photos}>
+          <Image source={{ uri }} style={s.photoImage} contentFit="cover" transition={150} />
+          {more > 0 && i === 3 && (
+            <View style={s.photoMore}>
+              <Text style={s.photoMoreText}>+{more}</Text>
+            </View>
+          )}
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** What Share sends: plain lines that read well in any chat app. */
+function shareText(shop: Shop): string {
+  return [
+    shop.name,
+    shop.address,
+    shop.phone,
+    `https://www.google.com/maps/search/?api=1&query=${shop.lat},${shop.lng}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
   StyleSheet.create({
     head: { paddingHorizontal: 18, paddingBottom: 12, gap: 10 },
@@ -405,12 +467,28 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     body: { paddingHorizontal: 18, paddingTop: 4, gap: 15, paddingBottom: 40 },
 
-    actions: { flexDirection: 'row', gap: 22, justifyContent: 'center', paddingVertical: 4 },
-    actWrap: { alignItems: 'center', gap: 7, width: 74 },
-    actCircle: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center' },
-    actFilled: { backgroundColor: theme.call },
-    actOutline: { borderWidth: 1.5, borderColor: theme.line, backgroundColor: theme.surface },
-    actLabel: { fontSize: 12, fontWeight: '600', color: theme.ink2 },
+    actions: { flexDirection: 'row', gap: 10, paddingVertical: 4 },
+    /* A tile per action, lifted off the panel; Call is filled and casts a warmer shadow. */
+    actWrap: {
+      flex: 1,
+      height: 78,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: theme.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.line,
+      elevation: 3,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    actWrapFilled: { backgroundColor: theme.call, borderColor: theme.call, shadowColor: theme.call, shadowOpacity: 0.35, elevation: 5 },
+    actCircle: { alignItems: 'center', justifyContent: 'center' },
+    actLabel: { fontSize: 13.5, fontWeight: '700', color: theme.ink },
+    actLabelOn: { color: theme.onFilled },
     pressed: { opacity: 0.6 },
     toggleRow: { flexDirection: 'row', gap: 10 },
     toggle: {
@@ -474,6 +552,11 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       justifyContent: 'center',
     },
     photoNote: { fontSize: 13, color: theme.ink2 },
+    photoRow: { flexDirection: 'row', gap: 6 },
+    photoTile: { flex: 1, height: 84, borderRadius: 12, overflow: 'hidden', backgroundColor: theme.mapBg },
+    photoImage: { width: '100%', height: '100%' },
+    photoMore: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(25,23,22,0.58)', alignItems: 'center', justifyContent: 'center' },
+    photoMoreText: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
 
     tagRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     tag: {

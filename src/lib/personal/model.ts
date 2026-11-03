@@ -24,9 +24,23 @@ export type PersonalData = {
   visited: string[];
   /** Keyed by shop id: the rider's own rating of that shop. */
   ratings: Record<string, MyRating>;
+  /** Shops this rider opened lately, newest first, at most MAX_RECENT (see pushRecent). */
+  recent: string[];
 };
 
-export const EMPTY_PERSONAL: PersonalData = { saved: [], visited: [], ratings: {} };
+export const EMPTY_PERSONAL: PersonalData = { saved: [], visited: [], ratings: {}, recent: [] };
+
+/**
+ * RECENTLY VIEWED, as in Google Maps: the last few shops opened carry a "Recently viewed"
+ * line on the map, so a rider can find again the shop they looked at a minute ago.
+ * Ten is enough to cover one search session without tagging half the map.
+ */
+export const MAX_RECENT = 10;
+
+/** Puts the id first, without a duplicate, and keeps only the newest MAX_RECENT. */
+export function pushRecent(list: string[], id: string): string[] {
+  return [id, ...list.filter((x) => x !== id)].slice(0, MAX_RECENT);
+}
 
 /** Adds the id if it is missing, removes it if it is there. Never duplicates. */
 export function toggleId(list: string[], id: string): string[] {
@@ -58,6 +72,7 @@ export function parsePersonal(raw: string | null): PersonalData {
       saved: Array.isArray(v.saved) ? v.saved.filter((x) => typeof x === 'string') : [],
       visited: Array.isArray(v.visited) ? v.visited.filter((x) => typeof x === 'string') : [],
       ratings: v.ratings && typeof v.ratings === 'object' ? v.ratings : {},
+      recent: Array.isArray(v.recent) ? v.recent.filter((x) => typeof x === 'string').slice(0, MAX_RECENT) : [],
     };
   } catch {
     return EMPTY_PERSONAL;

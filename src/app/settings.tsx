@@ -13,7 +13,7 @@ import { LANGUAGE_FLAGS, LANGUAGE_LABELS, type Language } from '@/lib/i18n/strin
 import { RADIUS_OPTIONS } from '@/lib/geo/distance';
 import { AREA_LABELS, useSettings, type Area } from '@/lib/settings/store';
 import { PALETTE_LABELS, type PaletteName, type ThemeName } from '@/lib/theme/tokens';
-import { askToRestart, checkNow, useUpdateReady } from '@/lib/updates';
+import { askToRestart, checkNow, restartApp, useUpdateReady } from '@/lib/updates';
 
 /**
  * Everything the welcome screen asked, changeable afterwards.
@@ -42,6 +42,21 @@ export default function SettingsScreen() {
   const router = useRouter();
   const updateReady = useUpdateReady();
   const s = styles(theme);
+
+  /*
+    GRAPHICS asks to restart either way (Clint, 1 Nov): each mode loads a different set of
+    pictures and map layers, and a fresh start loads only that mode's, instead of carrying
+    the other mode's in memory. The choice is saved first, so Later still switches; the
+    restart only finishes it.
+  */
+  const switchGraphics = (graphics: 'standard' | 'light') => {
+    if (graphics === settings.graphics) return;
+    update(graphics === 'light' ? { graphics, map3d: false } : { graphics });
+    Alert.alert(t.graphicsRestartTitle, t.graphicsRestartBody, [
+      { text: t.later, style: 'cancel' },
+      { text: t.restart, onPress: () => void restartApp(t) },
+    ]);
+  };
 
   const onCheckUpdates = async () => {
     if (updateReady) return askToRestart(t);
@@ -87,6 +102,31 @@ export default function SettingsScreen() {
           />
           {/* A heads-up while riding when a shop is just ahead. On unless switched off. */}
           <Toggle label={t.shopAlerts} value={settings.shopAlerts} onChange={(on) => update({ shopAlerts: on })} />
+          {/*
+            For older and cheaper phones (store.tsx, `graphics`). Light also lays a 3D map
+            flat, since 3D does not exist there. Either change asks to restart (switchGraphics).
+          */}
+          <Choice
+            label={t.graphics}
+            value={settings.graphics === 'light' ? t.graphicsLight : t.graphicsStandard}
+            options={[
+              {
+                key: 'standard',
+                label: t.graphicsStandard,
+                selected: settings.graphics === 'standard',
+                onPress: () => switchGraphics('standard'),
+              },
+              {
+                key: 'light',
+                label: t.graphicsLight,
+                selected: settings.graphics === 'light',
+                onPress: () => switchGraphics('light'),
+              },
+            ]}
+          />
+          {/* The only way into Your ride, by rule: an optional extra, never pushed anywhere else. */}
+          {/* Not in Light: the rider is a plain dot there, so there is no bike to choose. */}
+          {settings.graphics !== 'light' && <Link label={t.yourRide} onPress={() => router.push('/ride')} />}
         </Section>
 
         <Section title={t.sectionApp}>
@@ -128,8 +168,6 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title={t.sectionHelp}>
-          {/* The four rider questions, on their own page (app/survey.tsx). */}
-          <Link label={t.riderQuestions} onPress={() => router.push('/survey')} />
           {/*
             The second way back into the tutorial, beside the ? on the home screen.
             Clearing the flag and going home is all it takes: home starts it whenever the

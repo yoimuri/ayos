@@ -18,7 +18,7 @@ precisely the person with no signal. An app that spins on a loading screen is us
 moment it is needed most.
 
 So the app does not fetch shops when you open it. It holds the whole Metro Manila shop list
-on the phone, about 2,800 shops in well under a megabyte, and reads from that copy. Search,
+on the phone, about 2,900 shops in well under a megabyte, and reads from that copy. Search,
 distances, phone numbers and directions all work in airplane mode, and the map keeps working
 for any area already viewed.
 
@@ -147,10 +147,10 @@ Working on a test phone:
 
 - Map of Metro Manila with clustered shop markers, shop names when zoomed in, and the rider's
   position, heading and direction of travel
-- The map follows the rider while moving; "zoom to me" and recenter buttons
+- The map follows the rider while moving, and a button to go back to the rider
 - Shop list ordered by distance, search with suggestions, radius and city filters
 - Shop details under the map: call, text, directions, hours, open or closed
-- About 2,800 shops across all 17 Metro Manila cities, on the phone, usable with no signal
+- About 2,900 shops across all 17 Metro Manila cities, on the phone, usable with no signal
 - English and Taglish, light and dark, an interactive tutorial
 
 Built, not yet checked on the test phone:
@@ -159,11 +159,12 @@ Built, not yet checked on the test phone:
   visited shops drawn green on the map
 - Ratings in three parts (service, price, assistance), shown as one overall score with the
   parts one tap away
-- Field survey mode, for the team collecting shop details in person: correct a shop's
-  details, add a missing shop or fix a wrong one by dragging a pin onto it on the map (the
-  coordinates fill themselves in), keep every change in an editable log with the original
-  always restorable, and export one spreadsheet (new shops, edited shops, every change)
-  plus a backup. It is removed before release
+- Field survey mode, for the team surveying shops in person. Since 1 Nov it records exact
+  locations only (the surveyors type each shop's details in the spreadsheet themselves):
+  pin a listed shop where it really is, or pin a new shop with its name so it can be
+  matched to its spreadsheet row; every pin is kept in an editable log with the original
+  always restorable, and exported as one spreadsheet plus a backup. It is removed before
+  release
 - Riding mode: the map follows the rider and turns so the road ahead points up, pauses
   when the map is touched and comes back by itself on a turn or after 15 seconds, and the
   dot glides between GPS readings. Speed and direction are measured from the readings on
@@ -178,10 +179,146 @@ Built, not yet checked on the test phone:
   has downloaded, and "Check for updates" in Settings
 - Settings in four sections, with choices that open in place and switches for on/off
 
+Version 1.2.0 preview build (30 Oct 2026), not yet checked on a phone:
+
+- A 3D map: the camera tilts and buildings rise, kept low and pale so the shops and the
+  rider stand out. A cube / square button switches between 3D and a flat 2D map, and the
+  map flattens by itself when zoomed out to the whole city
+- Pins instead of dots: each shows what the shop fixes, whether it is open (green dot),
+  closed (grey) or visited (check). Groups of shops are small lit spheres with a count
+- The rider as a 3D motorcycle seen from behind when the map turns with the ride, and
+  from the front when riding toward the bottom of the screen; the flat bike otherwise
+- Dark mode uses a dark map
+- Search, My shops and Settings float over the map in one card; the city chip and help
+  sit under it, and the panel stops below the card
+- Shop rows as cards with a distance block, the address and a raised call button; shop
+  details with raised Call, Text and Directions tiles and a photo strip (three photos and
+  a "+N" tile; empty until photos are hosted)
+- A short vibration tap for shop-ahead alerts; new app icon and splash
+
+Version 1.3.0 preview build (31 Oct 2026), not yet checked on a phone:
+
+- The map opens flat (2D) on every launch; the cube button turns on 3D for that session
+- The rider is a 3D model of a motorcycle and rider, rendered in Blender: 24 pictures, one
+  every 15 degrees, so in 3D the bike faces the way the rider is going relative to the map;
+  in 2D the same bike is drawn from straight above and turned with the heading
+- Your ride, in Settings > Map and riding: choose the bike (scooter, underbone or standard),
+  its paint (six colours) and its size on the map (S, M, L, with a road beside it for scale).
+  The bike turns on a turntable (drag to turn it); nothing changes on the map until Save.
+  On a tablet the bike and the choices sit side by side
+- The splash screen no longer cuts off the logo's first letter
+
+Over-the-air update to 1.3.0 (31 Oct 2026), after the first look at the build, not yet
+checked on a phone:
+
+- Save in Your ride now changes the bike on the map. Before, the map kept the first bike it
+  was given until the app restarted
+- The bike stands in the middle of the turntable, zoomed to fill it; vehicle names shrink
+  to fit instead of being cut; the paints spread across the row
+- One location button instead of two, as in Google Maps: the first tap goes back to the
+  rider at street level; the second turns the map with the phone so the headlight beam
+  points up; the third goes back to north up. Dragging the map ends it
+- Two fingers turn the map; a compass button appears while it is turned, and one tap puts
+  north back up
+- A new version shows as a card above the shop panel ("New app version available",
+  Update app), which restarts into it in about a second
+- The shop list from the 30 Oct survey sheet: 2,892 shops (44 new, 14 removed)
+
+Second over-the-air update to 1.3.0 (31 Oct 2026), not yet checked on a phone:
+
+- Shop-type chips under the search (Repair, Parts, Dealers, Accessories): one tap shows
+  only that kind on the map and in the list, a second tap shows all again
+- Recently viewed: the last ten shops opened carry a "Recently viewed" line under their
+  name on the map, kept on the phone
+- Share on every shop: name, address, number and a Google Maps link, through the phone's
+  own share sheet
+- The location and 2D/3D buttons moved to the bottom right, as in Google Maps; the map
+  credit moved to the bottom left
+
+Third over-the-air update to 1.3.0 (31 Oct 2026), not yet checked on a phone:
+
+- Save in Your ride keeps you on the screen; the button reads "Saved ✓" until something
+  changes
+- The turntable uses its own sharp pictures, three times the size of the map's and in full
+  colour, instead of stretching the small map pictures
+- The size preview rides: the lane's centre line flows past the bike (still when the phone's
+  "Remove animations" setting is on)
+
+Fourth over-the-air update to 1.3.0 (31 Oct 2026), not yet checked on a phone:
+
+- The direction the phone points is a headlight beam: a warm fan of light that fades with
+  distance, lying on the road in 3D, instead of a flat red cone
+- The update reminder is a small faded chip in the bottom-left corner instead of a card
+  over the map
+- Location notices show their whole text (two lines) instead of cutting it off
+- Map only: a button on the map hides the search, chips, notices, shop panel and other
+  buttons; the same button or Back brings them back. Shop-ahead alerts still show
+- The Your ride Save button turns see-through, like a disabled button, while what is shown
+  is already saved
+
+Fifth over-the-air update to 1.3.0 (31 Oct 2026), not yet checked on a phone:
+
+- Settings > Map and riding > Graphics: Standard, or Light for older phones. Light turns off
+  the 3D map and its cube button, the bike gliding between GPS readings and the Your ride
+  turntable's self-spin, and keeps fewer turntable pictures in memory
+- Changing your ride now frees the old bike's map pictures instead of keeping every look
+  tried in memory; three unused rider pictures were deleted
+
+Sixth over-the-air update to 1.3.0 (31 Oct 2026), not yet checked on a phone:
+
+- A steadier compass with the phone upright in a holder: the direction comes from where the
+  phone's back faces, worked out from the raw tilt and magnetic sensors, instead of where its
+  top edge points. Flat, tilted or upright give the same answer; the old compass takes over
+  when the phone is on its side
+
+Seventh over-the-air update to 1.3.0 (1 Nov 2026), not yet checked on a phone:
+
+- The four rider questions are asked once, on first use, and are required before the app
+  opens (testers who never answered them get them once on their next launch). A grey "How
+  we use your answers" line explains what they are for. The "recorded" screen after them
+  is a demo: the answers still stay on the phone until the database exists. They are no
+  longer in Settings, and the reminder and popup are gone
+- Graphics: Light is now a lighter app overall, with 2D only: one glow ring under the rider,
+  Your ride with the small map pictures instead of the sharp set, and a still road preview.
+  Switching to Light or to Standard asks to restart the app (about a second; Later still
+  switches, the restart only finishes it)
+- Field survey mode records exact shop locations only (see Current state)
+
+Eighth over-the-air update to 1.3.0 (1 Nov 2026), not yet checked on a phone:
+
+- The app also checks for a new version whenever it comes back to the front (at most every
+  5 minutes), not only on a fresh start; the update reminder shows again each time until
+  the phone is on the newest version, and can still be closed
+
+Ninth over-the-air update to 1.3.0 (1 Nov 2026), not yet checked on a phone:
+
+- Graphics: Light becomes the classic look, for almost any phone: basic functions only
+  (map, list, search, call, text, directions, saved) in a plain UI. Shops, groups of shops,
+  the selected shop and the rider are plain dots drawn by the map (no pin or bike pictures
+  are loaded), the map is 2D only, cards and buttons are flat, and the shop-type chips, the
+  map-only button and Your ride are not shown. Standard is unchanged
+
+Tenth over-the-air update to 1.3.0 (1 Nov 2026), not yet checked on a phone:
+
+- The rider (bike, headlight beam, Light's dot) eases down to 60% of its size between street
+  and city zoom, so it no longer covers the shop groups around it when zoomed out
+
+Eleventh over-the-air update to 1.3.0 (3 Nov 2026), not yet checked on a phone:
+
+- Outside Metro Manila: a rider whose position is outside the area Ayoos covers is told
+  once per session that Ayoos only has shops in Metro Manila for now, and a quiet banner
+  stays while they are outside (tap it to see why again). The map itself stays held inside
+  Metro Manila
+
 Not built yet:
+
+- Outfits, helmets and parts in Your ride. Every combination would need its own set of map
+  pictures; drawing each part as its own layer of pictures is the likely way, not decided
 
 - A backend and database, so the shop list can be updated without a new app release
 - Saving ratings to a server (today a rating stays on the phone that gave it), legal pages
+- A notification the moment a new version is published (planned with the database, for the
+  beta build)
 - Shop ahead alerts with the app in the background (needs background location and a new
   app build); road routes to a shop (Directions hands off to Google Maps)
 - Self-hosted map tiles (it uses OpenFreeMap's public tiles today)
@@ -191,7 +328,8 @@ Not built yet:
 ## Design rules
 
 - Shops are always ordered by distance, never by rating.
-- Nothing blocks a rider who opened the app because their bike broke down: location, the
-  tutorial and the rider questions can all be skipped in one tap.
+- Nothing blocks a rider who opened the app because their bike broke down: location and
+  the tutorial can be skipped in one tap. The exception, by decision on 1 Nov, is the four
+  rider questions on first use: they are required before the app opens.
 - When the database is added, every table gets row level security before any data goes in,
   because the key inside the app is public and can be extracted from the APK.

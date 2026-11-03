@@ -11,6 +11,7 @@ import { FieldworkProvider } from '@/lib/fieldwork/store';
 import { LocationProvider } from '@/lib/location/useLocationGate';
 import { PersonalProvider } from '@/lib/personal/store';
 import { SettingsProvider, useSettings } from '@/lib/settings/store';
+import { surveyComplete } from '@/lib/survey/questions';
 
 /**
  * The shell every screen renders inside.
@@ -49,13 +50,19 @@ function RootNavigator() {
     if (loading) return;
 
     const onWelcome = segments[0] === 'welcome';
+    /*
+      Done means both: the optional first-run steps AND the rider questions, which are
+      required (welcome.tsx). A rider who answered all of them on an older version counts
+      as done.
+    */
+    const done = settings.onboarded && (settings.surveyState === 'answered' || surveyComplete(settings.survey));
 
-    if (!settings.onboarded && !onWelcome) {
+    if (!done && !onWelcome) {
       router.replace('/welcome');
-    } else if (settings.onboarded && onWelcome) {
+    } else if (done && onWelcome) {
       router.replace('/');
     }
-  }, [loading, settings.onboarded, segments, router]);
+  }, [loading, settings.onboarded, settings.surveyState, settings.survey, segments, router]);
 
   /*
     A plain themed rectangle while storage is read. It is a few milliseconds, and it

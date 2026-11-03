@@ -1,13 +1,20 @@
 import * as Location from 'expo-location';
+import { Accelerometer, Magnetometer } from 'expo-sensors';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 
 import { isBetterFix, type Fix } from './betterFix';
-import { createHeadingFilter } from './headingFilter';
+import { createHeadingFilter, shortestDelta } from './headingFilter';
 import { createPositionFilter } from './positionFilter';
 import { courseIsFresh } from './course';
 import { createMotion } from './motion';
 import { isGoodFix, SETTLE_TIMEOUT_MS } from './settle';
+import { ease, forwardHeading, type Vec3 } from './tiltHeading';
+
+/** How long a tilt-corrected reading stays in charge before the plain compass takes over again. */
+const TILT_FRESH_MS = 1000;
+/** Sensor readings a second: enough for a turning beam, light on the battery. */
+const SENSOR_INTERVAL_MS = 100;
 
 /**
  * Whether the app can see where the rider is, and what to do about it if not.
@@ -184,6 +191,18 @@ function useLocationGateState(): LocationGate {
   const lastCourseAt = useRef<number | null>(null);
   const watching = useRef<Location.LocationSubscription | null>(null);
   const compass = useRef<Location.LocationSubscription | null>(null);
+  /*
+    THE TILT-CORRECTED COMPASS (lib/location/tiltHeading.ts): the raw sensors, eased, plus
+    what it borrows from expo-location's compass: its calibration level (the filter drops
+    uncalibrated readings) and the declination, true north minus magnetic, which is the
+    only part of `trueHeading` worth keeping once the direction itself comes from here.
+  */
+  const sensors = useRef<{ remove: () => void }[]>([]);
+  const gravity = useRef<Vec3 | null>(null);
+  const field = useRef<Vec3 | null>(null);
+  const tiltAt = useRef(0);
+  const compassAccuracy = useRef(3);
+  const declination = useRef(0);
   /** Bumped by every stop, so a retry scheduled for an earlier watch never starts a second one. */
   const watchGeneration = useRef(0);
   const mounted = useRef(true);
@@ -196,6 +215,10 @@ function useLocationGateState(): LocationGate {
     watching.current = null;
     compass.current?.remove();
     compass.current = null;
+    sensors.current.forEach((sub) => sub.remove());
+    sensors.current = [];
+    gravity.current = null;
+    field.current = null;
     filter.current.reset();
     posFilter.current.reset();
     motion.current.reset();
@@ -410,25 +433,59 @@ function useLocationGateState(): LocationGate {
       works. Taking true when it is real and magnetic otherwise means the arrow points
       somewhere sensible in both cases rather than snapping to north.
     */
+    const emit = (deg: number) => {
+      /* Moving: the GPS course is already driving the arrow, and it is the better answer. */
+      if (courseIsFresh(lastCourseAt.current, Date.now())) return;
+      const next = filter.current.push(deg, compassAccuracy.current, Date.now());
+      /* null means this reading changes nothing worth drawing. Most of them do not. */
+      if (next === null) return;
+
+      /*
+        Folded back into 0-360. The filter emits an UNWRAPPED angle so that animating
+        between two readings takes the short way round; nothing animates it now, and a
+        map's icon rotation wants a plain bearing.
+      */
+      setHeading(((next % 360) + 360) % 360);
+    };
     try {
       compass.current = await Location.watchHeadingAsync((h) => {
         if (!mounted.current) return;
-        /* Moving: the GPS course is already driving the arrow, and it is the better answer. */
-        if (courseIsFresh(lastCourseAt.current, Date.now())) return;
-        const deg = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
-        const next = filter.current.push(deg, h.accuracy, Date.now());
-        /* null means this reading changes nothing worth drawing. Most of them do not. */
-        if (next === null) return;
-
-        /*
-          Folded back into 0-360. The filter emits an UNWRAPPED angle so that animating
-          between two readings takes the short way round; nothing animates it now, and a
-          map's icon rotation wants a plain bearing.
-        */
-        setHeading(((next % 360) + 360) % 360);
+        compassAccuracy.current = h.accuracy;
+        if (h.trueHeading >= 0) declination.current = shortestDelta(h.magHeading, h.trueHeading);
+        /* The tilt-corrected compass is running: it gives the direction, this only the extras. */
+        if (Date.now() - tiltAt.current < TILT_FRESH_MS) return;
+        emit(h.trueHeading >= 0 ? h.trueHeading : h.magHeading);
       });
     } catch {
       /* A device with no magnetometer simply never gets an arrow direction. */
+    }
+    /*
+      The phone held upright in a holder: where its BACK faces, not its top edge (N9). Runs
+      beside expo-location's compass and takes over whenever it has an answer; on its side
+      or without the sensors it gives none, and the plain compass carries on alone.
+    */
+    try {
+      sensors.current.forEach((sub) => sub.remove());
+      sensors.current = [];
+      if ((await Accelerometer.isAvailableAsync()) && (await Magnetometer.isAvailableAsync())) {
+        Accelerometer.setUpdateInterval(SENSOR_INTERVAL_MS);
+        Magnetometer.setUpdateInterval(SENSOR_INTERVAL_MS);
+        sensors.current.push(
+          Accelerometer.addListener((a) => {
+            gravity.current = ease(gravity.current, a, 0.2);
+          }),
+          Magnetometer.addListener((m) => {
+            if (!mounted.current || !gravity.current) return;
+            field.current = ease(field.current, m, 0.3);
+            const deg = forwardHeading(gravity.current, field.current);
+            if (deg === null) return;
+            tiltAt.current = Date.now();
+            emit(deg + declination.current);
+          }),
+        );
+      }
+    } catch {
+      /* No sensors: the plain compass above is all there is. */
     }
   }, []);
 

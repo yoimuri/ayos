@@ -34,6 +34,12 @@ export type Strings = {
   call: string;
   message: string;
   directions: string;
+  share: string;
+  recentlyViewed: string;
+  kindRepair: string;
+  kindParts: string;
+  kindDealer: string;
+  kindAccessories: string;
   phone: string;
   otherContacts: string;
   noNumber: string;
@@ -113,6 +119,13 @@ export type Strings = {
   qServices: string;
   qServicesHint: string;
   surveyWhy: string;
+  qIntro: string;
+  qHowUsedLink: string;
+  qHowUsed: string;
+  qSubmit: string;
+  qNeedAll: string;
+  qRecordedTitle: string;
+  qRecordedBody: string;
   surveyThanksTitle: string;
   surveyThanksBody: string;
   answerNow: string;
@@ -125,6 +138,11 @@ export type Strings = {
 
   // My shops
   myShops: string;
+  /** Map mode button, spoken: what tapping it switches to. */
+  view3d: string;
+  view2d: string;
+  photos: string;
+  morePhotos: (n: number) => string;
   tabSaved: string;
   tabVisited: string;
   tabRated: string;
@@ -154,6 +172,13 @@ export type Strings = {
 
   // Shop ahead alerts
   shopAlerts: string;
+  graphics: string;
+  graphicsStandard: string;
+  graphicsLight: string;
+  graphicsRestartTitle: string;
+  graphicsRestartBody: string;
+  reopenTitle: string;
+  reopenBody: string;
   /** One shop: "Shop ahead · 120 m on your left". */
   shopAheadOne: (metres: number, side: 'left' | 'right' | 'ahead') => string;
   /** Several: "4 shops ahead within 150 m". */
@@ -186,6 +211,11 @@ export type Strings = {
   locationOff: string;
   locationNotAllowed: string;
   distancesFromArea: string;
+  outsideTitle: string;
+  outsideBody: string;
+  outsideBanner: string;
+  outsideMore: string;
+  gotIt: string;
   improve: string;
   fix: string;
   turnOn: string;
@@ -206,6 +236,21 @@ export type Strings = {
 
   // Settings sections
   sectionMap: string;
+  /** Your ride: the bike drawn on the map. */
+  yourRide: string;
+  rideVehicle: string;
+  rideSize: string;
+  ridePaint: string;
+  rideSave: string;
+  rideSaved: string;
+  rideSoon: string;
+  /** Read aloud by screen readers on the turning bike. */
+  rideTurnHint: string;
+  vehicleScooter: string;
+  vehicleUnderbone: string;
+  vehicleStandard: string;
+  vehicleTricycle: string;
+  vehicleEbike: string;
   sectionApp: string;
   sectionHelp: string;
   searchCircle: string;
@@ -220,6 +265,8 @@ export type Strings = {
   upToDateBody: string;
   updateReady: string;
   updateReadyBody: string;
+  updateCardTitle: string;
+  updateCardAction: string;
   restart: string;
   updateFailed: string;
   noInternet: string;
@@ -260,6 +307,12 @@ const en: Strings = {
   call: 'Call',
   message: 'Message',
   directions: 'Directions',
+  share: 'Share',
+  recentlyViewed: 'Recently viewed',
+  kindRepair: 'Repair',
+  kindParts: 'Parts',
+  kindDealer: 'Dealers',
+  kindAccessories: 'Accessories',
   phone: 'Phone',
   otherContacts: 'Other ways to reach them',
   noNumber: 'No number on file',
@@ -280,19 +333,16 @@ const en: Strings = {
   whatHappenedHint: 'What did they do for you?',
   yourName: 'Your name',
   email: 'Email',
-  emailHelp:
-    'We will send you a link. Your rating stays hidden until you tap it. Your email is never shown to anyone.',
+  emailHelp: "We'll email you a link. Your rating shows after you tap it. Your email stays private.",
   send: 'Send',
   offlineTitle: 'When you have no signal',
-  offlineBody:
-    'Rating is turned off. We do not hold it to send later, so you never think it went through when it did not.',
+  offlineBody: "No signal, so rating is off. Try again once you're online.",
 
   welcomeTitle: 'Find the nearest shop, even with no signal',
-  welcomeBody:
-    'Ayoos keeps every Metro Manila shop on your phone, so the list opens instantly and the numbers work when your data does not.',
+  welcomeBody: 'Every Metro Manila shop, saved on your phone. Works even with no signal.',
   chooseLanguage: 'Which language?',
   chooseArea: 'Where in Metro Manila?',
-  chooseAreaHelp: 'We use this only to sort your first list. Your exact location is never stored.',
+  chooseAreaHelp: 'Sorts your first list. Your exact location is never stored.',
   chooseTheme: 'Light or dark?',
   themeLight: 'Light',
   themeDark: 'Dark',
@@ -309,8 +359,7 @@ const en: Strings = {
   appearance: 'Appearance',
   notSet: 'Not set',
   about: 'About Ayoos',
-  aboutBody:
-    'Ayoos shows you the motorcycle shops nearest to you and keeps them on your phone, so the list opens and the numbers work even with no signal. It locates shops. It does not rate how good they are, and shops are always ordered by distance, never by rating.',
+  aboutBody: 'Find the nearest motorcycle shop, even with no signal. Shops are always listed by distance, never by rating.',
   draftNotice:
     "This is a draft build with sample functionalities. This is subject to changes so kalikutin mo lang hangga't gusto mo.",
   searchRadius: 'Search radius',
@@ -334,11 +383,17 @@ const en: Strings = {
   qVisitsUnit: 'times a year',
   qServices: 'What do you usually get or buy there?',
   qServicesHint: 'Pick all that apply.',
-  surveyWhy:
-    'This helps us find the right shops to add. Your answers stay on this phone; nothing is sent anywhere.',
+  surveyWhy: 'Helps us add the right shops. Your answers stay on this phone.',
+  qIntro: '4 quick questions about your motorcycle. Under a minute.',
+  qHowUsedLink: 'How we use your answers',
+  qHowUsed:
+    'We count everyone’s answers together, never one rider’s alone, to decide which shops and services our team adds next and which brands’ parts to look for. Your answers are not linked to your name, number or location.',
+  qSubmit: 'Submit',
+  qNeedAll: 'Answer the brand, year, visits and at least one service to continue.',
+  qRecordedTitle: 'Thanks, your answers are recorded',
+  qRecordedBody: 'They help us add the shops and services riders like you need.',
   surveyThanksTitle: 'Thank you for downloading Ayoos!',
-  surveyThanksBody:
-    'So we can help you better in the future, could you answer 4 quick questions about your motorcycle? It takes less than a minute, and your answers stay on this phone.',
+  surveyThanksBody: '4 quick questions about your motorcycle? Under a minute. Answers stay on this phone.',
   answerNow: 'Answer now',
   later: 'Later',
   surveyReminder: '4 quick questions about your motorcycle',
@@ -348,6 +403,10 @@ const en: Strings = {
   tourDrag: 'Drag this bar down to see more of the map, or up to see more of the list.',
 
   myShops: 'My shops',
+  view3d: 'Show the map in 3D',
+  view2d: 'Show the map flat, in 2D',
+  photos: 'Photos',
+  morePhotos: (n) => `${n} more photos`,
   tabSaved: 'Saved',
   tabVisited: 'Visited',
   tabRated: 'Rated',
@@ -372,28 +431,35 @@ const en: Strings = {
 
   fieldMode: 'Field survey mode',
   fieldModeInfo:
-    "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
+    "Para sa surveyor: kunin ang eksaktong lokasyon ng bawat shop. Pumunta sa shop, i-pin ang tamang puwesto, at i-export.\n\nLokasyon lang ang kinukuha dito. Ang ibang detalye ng shop ay sa spreadsheet itinatala.",
 
   shopAlerts: 'Shop ahead alerts',
+  graphics: 'Graphics',
+  graphicsStandard: 'Standard',
+  graphicsLight: 'Light, for older phones',
+  graphicsRestartTitle: 'Restart Ayoos?',
+  graphicsRestartBody: 'The new graphics setting loads fully on a fresh start. It takes about a second, and nothing you saved is lost.',
+  reopenTitle: 'Close and reopen Ayoos',
+  reopenBody: 'The app could not restart itself. Close it and open it again to finish.',
   shopAheadOne: (m, side) => (side === 'ahead' ? `Shop ahead · ${m} m` : `Shop ahead · ${m} m on your ${side}`),
   shopsAheadMany: (n, m) => `${n} shops ahead within ${m} m`,
   aheadWhere: (m, side) => (side === 'ahead' ? `${m} m ahead` : `${m} m on your ${side}`),
   dismiss: 'Dismiss',
   noFixYet: "Can't read your location yet",
 
-  locOffTitle: 'Location is off on this phone',
-  locOffBody: 'Ayoos cannot tell how far each shop is from you, so distances are measured from the area you picked instead.',
+  locOffTitle: 'Location is off',
+  locOffBody: 'Distances are from the area you picked.',
   locOffAction: 'Open location settings',
-  locBlockedTitle: 'Ayoos cannot use your location',
-  locBlockedBody: 'Permission was turned off for this app, and Android will not ask again from here. You can change it in the app settings.',
+  locBlockedTitle: 'Location is blocked',
+  locBlockedBody: 'Turn it on for Ayoos in app settings.',
   locBlockedAction: 'Open app settings',
   locAskTitle: 'Turn on location?',
-  locAskBody: 'It is only used to work out how far each shop is from you. It stays on your phone and is never sent anywhere.',
+  locAskBody: 'Only used to measure distance to shops. It never leaves your phone.',
   locAskAction: 'Turn on location',
   mapCached: 'The map is showing the last area you loaded.',
   mapCachedOffline: 'You are offline, so the map is showing the last area you loaded.',
   notNow: 'Not now',
-  locWorksWithout: 'Everything else works without it: the shop list, search and phone numbers are already saved on your phone.',
+  locWorksWithout: 'Shops and calls still work without it.',
   roughFix: (m) => `Rough fix · about ${m} m out`,
   roughFixSpoken: (m) => `Your position is accurate to about ${m} metres. Tap to improve it.`,
   approxLocation: 'Approximate location · distances can be km off',
@@ -401,6 +467,12 @@ const en: Strings = {
   locationOff: 'Location off',
   locationNotAllowed: 'Location not allowed',
   distancesFromArea: 'distances are from your area',
+  outsideTitle: 'You are outside Metro Manila',
+  outsideBody:
+    'Ayoos only has shops in Metro Manila for now, so the map stays there and the nearest shops may be far from you. We plan to add more places as more riders use Ayoos.',
+  outsideBanner: 'Outside Metro Manila · shops are in Metro Manila only for now',
+  outsideMore: 'Why',
+  gotIt: 'Got it',
   improve: 'Improve',
   fix: 'Fix',
   turnOn: 'Turn on',
@@ -411,13 +483,26 @@ const en: Strings = {
   backOnline: 'Back online',
 
   noPhoneTitle: 'No phone number yet',
-  noPhoneBody: 'We have not collected one for this shop. You can still get directions, and the address below is the one recorded on the visit.',
+  noPhoneBody: 'No number collected yet. Directions still work.',
   starHint: 'Tap a star, or drag across them',
   starsOfFive: (v) => `${v} of 5`,
   clear: 'Clear',
   clearRating: 'Clear rating',
 
   sectionMap: 'Map and riding',
+  yourRide: 'Your ride',
+  rideVehicle: 'Vehicle',
+  rideSize: 'Size on the map',
+  ridePaint: 'Paint',
+  rideSave: 'Save',
+  rideSaved: 'Saved',
+  rideSoon: 'Soon',
+  rideTurnHint: 'Drag sideways to turn the bike',
+  vehicleScooter: 'Scooter',
+  vehicleUnderbone: 'Underbone',
+  vehicleStandard: 'Standard',
+  vehicleTricycle: 'Tricycle',
+  vehicleEbike: 'E-bike',
   sectionApp: 'App',
   sectionHelp: 'Help and about',
   searchCircle: 'Search circle on the map',
@@ -431,6 +516,8 @@ const en: Strings = {
   upToDateBody: 'You have the newest version.',
   updateReady: 'Update ready',
   updateReadyBody: 'Restart the app now to use it?',
+  updateCardTitle: 'New version',
+  updateCardAction: 'Update',
   restart: 'Restart',
   updateFailed: 'Could not check for updates',
   noInternet: 'No connection',
@@ -441,7 +528,7 @@ const en: Strings = {
   tourActions: 'From here you can call the shop, text them, or get directions.',
   tourBackToList: 'Tap here to go back to the list.',
   tourRadius: 'Choose how far to look. Try it: tap one.',
-  tourRecentre: 'Lost on the map? Tap this to go back to where you are.',
+  tourRecentre: 'Lost on the map? Tap this to go back to where you are. Tap again to turn the map with your phone.',
   tourHelp: 'Want to see this again? Tap ? any time, or find it in Settings.',
   tourTapHint: 'Tap the lit-up part',
   tourNext: 'Next',
@@ -470,6 +557,12 @@ const tl: Strings = {
   call: 'Tawagan',
   message: 'I-text',
   directions: 'Daan',
+  share: 'I-share',
+  recentlyViewed: 'Kakatingin lang',
+  kindRepair: 'Repair',
+  kindParts: 'Piyesa',
+  kindDealer: 'Dealer',
+  kindAccessories: 'Accessories',
   phone: 'Telepono',
   otherContacts: 'Ibang paraan para makontak sila',
   noNumber: 'Walang numero',
@@ -490,20 +583,16 @@ const tl: Strings = {
   whatHappenedHint: "Ano'ng ginawa nila?",
   yourName: 'Pangalan mo',
   email: 'Email',
-  emailHelp:
-    "Padadalhan ka namin ng link. Hindi lalabas ang rating mo hangga't hindi mo pinipindot 'yon. Hindi namin ipapakita ang email mo kahit kanino.",
+  emailHelp: 'Magpapadala kami ng link sa email mo. Lalabas ang rating mo pag pinindot mo ito. Hindi makikita ng iba ang email mo.',
   send: 'Ipadala',
   offlineTitle: 'Kapag walang signal',
-  offlineBody:
-    'Naka-off ang pag-rate. Hindi namin itatabi para ipadala mamaya, para walang akalang naipasa na pero hindi pala.',
+  offlineBody: 'Walang signal kaya hindi pa makakapag-rate. Subukan ulit pag may internet.',
 
   welcomeTitle: 'Hanapin ang pinakamalapit na shop, kahit walang signal',
-  welcomeBody:
-    'Naka-save sa phone mo ang lahat ng shop sa Metro Manila, kaya bumubukas agad ang listahan at gumagana ang mga numero kahit walang data.',
+  welcomeBody: 'Lahat ng shop sa Metro Manila, naka-save sa phone mo. Gumagana kahit walang signal.',
   chooseLanguage: 'Anong lengguwahe?',
   chooseArea: 'Saan ka sa Metro Manila?',
-  chooseAreaHelp:
-    'Ginagamit lang ito para sa unang listahan mo. Hindi namin iniimbak ang eksaktong location mo.',
+  chooseAreaHelp: 'Para lang ayusin ang unang listahan. Hindi sine-save ang eksaktong location mo.',
   chooseTheme: 'Light o dark?',
   themeLight: 'Light',
   themeDark: 'Dark',
@@ -520,8 +609,7 @@ const tl: Strings = {
   appearance: 'Itsura',
   notSet: 'Wala pa',
   about: 'Tungkol sa Ayoos',
-  aboutBody:
-    "Ipinapakita ng Ayoos ang mga motor shop na pinakamalapit sa'yo, at naka-save sila sa phone mo kaya bumubukas ang listahan at gumagana ang mga numero kahit walang signal. Naghahanap lang ito ng shop. Hindi nito hinuhusgahan kung magaling sila, at ayon sa layo ang pagkakasunod, hindi sa rating.",
+  aboutBody: 'Hanapin ang pinakamalapit na motor shop, kahit walang signal. Laging ayon sa layo ang listahan, hindi sa rating.',
   draftNotice:
     "This is a draft build with sample functionalities. This is subject to changes so kalikutin mo lang hangga't gusto mo.",
   searchRadius: 'Lawak ng hanap',
@@ -546,11 +634,17 @@ const tl: Strings = {
   qVisitsUnit: 'beses sa isang taon',
   qServices: 'Ano ang karaniwan mong pinapagawa o binibili doon?',
   qServicesHint: 'Piliin lahat ng tugma.',
-  surveyWhy:
-    'Tumutulong ito para malaman namin kung anong mga shop ang idadagdag. Naka-save lang sa phone mo ang sagot mo; walang ipinapadala kahit saan.',
+  surveyWhy: 'Para malaman namin kung anong shop ang idadagdag. Nasa phone mo lang ang sagot mo.',
+  qIntro: '4 na mabilis na tanong tungkol sa motor mo. Wala pang isang minuto.',
+  qHowUsedLink: 'Paano namin gagamitin ang sagot mo',
+  qHowUsed:
+    'Pinagsasama-sama namin ang sagot ng lahat, hindi kailanman ng iisang rider lang, para malaman kung anong shop at serbisyo ang idadagdag ng team at anong brand ng piyesa ang hahanapin. Hindi naka-link ang sagot mo sa pangalan, numero o lokasyon mo.',
+  qSubmit: 'Ipasa',
+  qNeedAll: 'Sagutin ang brand, taon, dalas ng punta at kahit isang serbisyo para tumuloy.',
+  qRecordedTitle: 'Salamat, naitala na ang sagot mo',
+  qRecordedBody: 'Makakatulong ito para maidagdag namin ang mga shop at serbisyong kailangan ng mga rider na tulad mo.',
   surveyThanksTitle: 'Salamat sa pag-download ng Ayoos!',
-  surveyThanksBody:
-    'Para mas matulungan ka namin sa susunod, puwede mo bang sagutin ang 4 na mabilis na tanong tungkol sa motor mo? Wala pang isang minuto, at naka-save lang sa phone mo ang sagot mo.',
+  surveyThanksBody: '4 na mabilis na tanong tungkol sa motor mo? Wala pang isang minuto. Nasa phone mo lang ang sagot.',
   answerNow: 'Sagutin na',
   later: 'Mamaya na',
   surveyReminder: '4 na mabilis na tanong tungkol sa motor mo',
@@ -560,6 +654,10 @@ const tl: Strings = {
   tourDrag: 'Hilahin pababa ang bar na ito para makita ang mapa, o pataas para sa listahan.',
 
   myShops: 'Mga shop ko',
+  view3d: 'Ipakita ang mapa sa 3D',
+  view2d: 'Ipakita ang mapa nang flat, 2D',
+  photos: 'Mga litrato',
+  morePhotos: (n) => `${n} pang litrato`,
   tabSaved: 'Naka-save',
   tabVisited: 'Napuntahan',
   tabRated: 'Na-rate',
@@ -584,9 +682,16 @@ const tl: Strings = {
 
   fieldMode: 'Field survey mode',
   fieldModeInfo:
-    "Click mo lang 'to pag gusto mo i-update yung details ng mga shop sa buong app.\n\nSa phone mo muna ito. Makikita ng lahat kapag na-update na namin ang listahan.",
+    "Para sa surveyor: kunin ang eksaktong lokasyon ng bawat shop. Pumunta sa shop, i-pin ang tamang puwesto, at i-export.\n\nLokasyon lang ang kinukuha dito. Ang ibang detalye ng shop ay sa spreadsheet itinatala.",
 
   shopAlerts: 'Alerto sa shop sa unahan',
+  graphics: 'Graphics',
+  graphicsStandard: 'Standard',
+  graphicsLight: 'Magaan, para sa lumang phone',
+  graphicsRestartTitle: 'I-restart ang Ayoos?',
+  graphicsRestartBody: 'Buong magagamit ang bagong graphics setting pagkabukas ulit. Mga isang segundo lang, at walang mawawala sa mga na-save mo.',
+  reopenTitle: 'Isara at buksan ulit ang Ayoos',
+  reopenBody: 'Hindi ma-restart ng app ang sarili nito. Isara ito at buksan ulit para matapos.',
   shopAheadOne: (m, side) =>
     side === 'ahead' ? `May shop sa unahan · ${m} m` : `May shop sa ${side === 'left' ? 'kaliwa' : 'kanan'} · ${m} m`,
   shopsAheadMany: (n, m) => `${n} shop sa unahan, within ${m} m`,
@@ -594,19 +699,19 @@ const tl: Strings = {
   dismiss: 'Isara',
   noFixYet: 'Hindi pa mabasa ang location mo',
 
-  locOffTitle: 'Naka-off ang location ng phone mo',
-  locOffBody: "Hindi malaman ng Ayoos kung gaano kalayo ang bawat shop sa'yo, kaya mula sa area na pinili mo binibilang ang layo.",
+  locOffTitle: 'Naka-off ang location',
+  locOffBody: 'Mula sa area na pinili mo ang layo.',
   locOffAction: 'Buksan ang location settings',
-  locBlockedTitle: 'Hindi magamit ng Ayoos ang location mo',
-  locBlockedBody: 'Naka-off ang permission para sa app na ito, at hindi na ulit magtatanong ang Android. Mababago mo ito sa app settings.',
+  locBlockedTitle: 'Naka-block ang location',
+  locBlockedBody: 'I-on ito para sa Ayoos sa app settings.',
   locBlockedAction: 'Buksan ang app settings',
   locAskTitle: 'I-on ang location?',
-  locAskBody: "Ginagamit lang ito para malaman kung gaano kalayo ang bawat shop sa'yo. Nasa phone mo lang ito at hindi ipinapadala kahit saan.",
+  locAskBody: 'Para lang sukatin ang layo ng mga shop. Hindi ito lumalabas sa phone mo.',
   locAskAction: 'I-on ang location',
   mapCached: 'Ang nasa mapa ay yung huling area na na-load mo.',
   mapCachedOffline: 'Offline ka, kaya ang nasa mapa ay yung huling area na na-load mo.',
   notNow: 'Mamaya na',
-  locWorksWithout: 'Gumagana pa rin ang lahat kahit wala ito: naka-save na sa phone mo ang listahan ng shop, search at mga phone number.',
+  locWorksWithout: 'Gumagana pa rin ang listahan at tawag kahit wala ito.',
   roughFix: (m) => `Hindi eksakto · mga ${m} m ang lihis`,
   roughFixSpoken: (m) => `Hanggang mga ${m} metro ang lihis ng location mo. Pindutin para ayusin.`,
   approxLocation: 'Approximate location · puwedeng ilang km ang mali sa layo',
@@ -614,6 +719,12 @@ const tl: Strings = {
   locationOff: 'Naka-off ang location',
   locationNotAllowed: 'Hindi pinayagan ang location',
   distancesFromArea: 'mula sa area mo ang layo',
+  outsideTitle: 'Nasa labas ka ng Metro Manila',
+  outsideBody:
+    'Sa ngayon, sa Metro Manila pa lang may mga shop ang Ayoos, kaya doon lang ang mapa at maaaring malayo sa iyo ang pinakamalapit na shop. Balak naming magdagdag ng iba pang lugar habang dumarami ang gumagamit ng Ayoos.',
+  outsideBanner: 'Nasa labas ng Metro Manila · Metro Manila pa lang ang may shop',
+  outsideMore: 'Bakit',
+  gotIt: 'Sige',
   improve: 'Ayusin',
   fix: 'Ayusin',
   turnOn: 'I-on',
@@ -624,13 +735,26 @@ const tl: Strings = {
   backOnline: 'May connection na ulit',
 
   noPhoneTitle: 'Wala pang phone number',
-  noPhoneBody: 'Wala pa kaming nakuhang number ng shop na ito. Puwede ka pa ring kumuha ng directions, at ang address sa ibaba ay yung naitala noong binisita namin.',
+  noPhoneBody: 'Wala pang nakuhang number. Puwede pa rin ang directions.',
   starHint: 'Pindutin ang star, o i-drag sa mga star',
   starsOfFive: (v) => `${v} sa 5`,
   clear: 'Burahin',
   clearRating: 'Burahin ang rating',
 
   sectionMap: 'Mapa at biyahe',
+  yourRide: 'Ang motor mo',
+  rideVehicle: 'Sasakyan',
+  rideSize: 'Laki sa mapa',
+  ridePaint: 'Kulay',
+  rideSave: 'I-save',
+  rideSaved: 'Naka-save',
+  rideSoon: 'Malapit na',
+  rideTurnHint: 'I-drag pakaliwa o pakanan para iikot ang motor',
+  vehicleScooter: 'Scooter',
+  vehicleUnderbone: 'Underbone',
+  vehicleStandard: 'Standard',
+  vehicleTricycle: 'Tricycle',
+  vehicleEbike: 'E-bike',
   sectionApp: 'App',
   sectionHelp: 'Tulong at about',
   searchCircle: 'Bilog ng hanap sa mapa',
@@ -644,6 +768,8 @@ const tl: Strings = {
   upToDateBody: 'Pinakabagong version na ang gamit mo.',
   updateReady: 'May update na',
   updateReadyBody: 'I-restart ang app ngayon para magamit ito?',
+  updateCardTitle: 'Bagong version',
+  updateCardAction: 'I-update',
   restart: 'I-restart',
   updateFailed: 'Hindi ma-check ang update',
   noInternet: 'Walang connection',
@@ -654,7 +780,7 @@ const tl: Strings = {
   tourActions: 'Dito ka puwedeng tumawag, mag-text, o humanap ng daan papunta sa shop.',
   tourBackToList: 'Pindutin ito para bumalik sa listahan.',
   tourRadius: 'Piliin kung gaano kalayo ang hahanapin. Subukan: pumindot ng isa.',
-  tourRecentre: 'Nawala ka sa mapa? Pindutin ito para bumalik kung nasaan ka.',
+  tourRecentre: 'Nawala ka sa mapa? Pindutin ito para bumalik kung nasaan ka. Pindutin ulit para umikot ang mapa kasabay ng phone mo.',
   tourHelp: 'Gusto mong ulitin ito? Pindutin ang ? kahit kailan, o hanapin sa Settings.',
   tourTapHint: 'Pindutin ang naka-ilaw',
   tourNext: 'Sunod',

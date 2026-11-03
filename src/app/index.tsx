@@ -1,6 +1,8 @@
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   BackHandler,
   FlatList,
   Keyboard,
@@ -10,19 +12,17 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  Vibration,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { BrandHeader, Wordmark } from '@/components/BrandBar';
+import { Wordmark } from '@/components/BrandBar';
 import { ContactCard } from '@/components/ContactCard';
 import { ShopSheet, sheetTop, type SheetPosition } from '@/components/ShopSheet';
 import { ShopDetailsBody, ShopDetailsHeader } from '@/components/ShopDetails';
 import { ContactIcon, ExpandIcon, GearIcon, NavIcon, SavedIcon, SearchIcon } from '@/components/icons';
-import { SurveyPrompt } from '@/components/SurveyPrompt';
 import {
   AccuracyBanner,
   FindingBanner,
@@ -31,21 +31,24 @@ import {
   LocationCard,
   NoticeStack,
   PreciseBanner,
-  UpdateBanner,
+  UpdateChip,
+  OutsideBanner,
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
 import { RealMap } from '@/components/RealMap';
 import { ShopAheadBanner } from '@/components/ShopAhead';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
 import { useOnline } from '@/lib/net/useOnline';
-import { askToRestart, useUpdateReady } from '@/lib/updates';
+import { restartIntoUpdate, useUpdateOnReturn, useUpdateReady } from '@/lib/updates';
+import { insideCoverage } from '@/lib/geo/coverage';
 import { useLocationGate } from '@/lib/location/useLocationGate';
 import { useAppShops } from '@/lib/data/shops';
 import { useExportReminder } from '@/lib/fieldwork/store';
 import { overall } from '@/lib/personal/model';
 import { usePersonal } from '@/lib/personal/store';
 import { NO_ALERTS, nextAlert, type AheadOf, type AlertMemory } from '@/lib/nearby/ahead';
-import type { Shop } from '@/lib/data/types';
+import type { Shop, ShopTag } from '@/lib/data/types';
+import type { Strings } from '@/lib/i18n/strings';
 import { RADIUS_OPTIONS, shopsForArea, splitDistance } from '@/lib/geo/distance';
 import { AREA_CENTRES, AREA_LABELS, useSettings, type Area } from '@/lib/settings/store';
 
@@ -116,7 +119,6 @@ export default function HomeScreen() {
   /* The suggestion list under the search box: open while typing, closed once one is picked. */
   const [suggestOpen, setSuggestOpen] = useState(false);
   /* The thank-you popup asking the rider questions. */
-  const [surveyAsk, setSurveyAsk] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   /*
     NEAR ME. True from launch: a rider opening the app wants what is around
@@ -138,6 +140,8 @@ export default function HomeScreen() {
     changes with the phone's status bar and the rider's font size.
   */
   const [stageH, setStageH] = useState(0);
+  /** Height of the floating search card and chips over the top of the map. */
+  const [headerH, setHeaderH] = useState(0);
   const [sheetAt, setSheetAt] = useState<SheetPosition>('both');
   /* Null while the first check is still running; treated as online until proven otherwise. */
   const online = useOnline();
@@ -182,10 +186,17 @@ export default function HomeScreen() {
     highlighted. `focus` is both the highlighted pin and the open shop, so the two can
     never disagree.
   */
-  const openShop = useCallback((shop: Shop) => {
-    setFocus((f) => ({ shop, nonce: (f?.nonce ?? 0) + 1 }));
-    setSheetAt('both');
-  }, []);
+  const personal = usePersonal();
+  const { markViewed } = personal;
+  const openShop = useCallback(
+    (shop: Shop) => {
+      setFocus((f) => ({ shop, nonce: (f?.nonce ?? 0) + 1 }));
+      setSheetAt('both');
+      /* For the "Recently viewed" line on the map. */
+      markViewed(shop.id);
+    },
+    [markViewed],
+  );
   const closeShop = () => setFocus(null);
 
   /*
@@ -210,7 +221,6 @@ export default function HomeScreen() {
     coordinates, so its distances are computed from the current position.
   */
   const allShops = useAppShops(gate.position, settings.area);
-  const personal = usePersonal();
   const exportDue = useExportReminder();
 
   /*
@@ -235,7 +245,8 @@ export default function HomeScreen() {
   /* A short buzz with each new alert, and the banner goes by itself after 8 seconds. */
   useEffect(() => {
     if (!aheadBanner) return;
-    Vibration.vibrate(250);
+    /* A firm tap through the phone's haptics engine (expo-haptics, in the APK from 1.2.0), not a raw buzz. */
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     const timer = setTimeout(() => setAheadBanner(null), 8000);
     return () => clearTimeout(timer);
   }, [aheadBanner]);
@@ -350,6 +361,33 @@ export default function HomeScreen() {
     [allShops, settings.radiusM, gate.position],
   );
 
+  /**
+   * THE SHOP-TYPE CHIPS under the search, as Google Maps has Restaurants / Shopping /
+   * Hotels: one tap shows only that kind of shop, on the map and in the list; a second
+   * tap on the same chip shows every kind again. One at a time, like Google's.
+   */
+  const [kind, setKind] = useState<ShopTag | null>(null);
+  /*
+    GRAPHICS: LIGHT, the classic look (Clint, 1 Nov): basic functions only (map, list,
+    search, call, text, directions, saved) in a plain UI that almost any phone can carry.
+    Here: no shop-type chips, flat cards without shadows. The map and Settings do the rest.
+  */
+  const light = settings.graphics === 'light';
+  /*
+    MAP ONLY: everything over the map hidden for a moment (the button on the map, or Back,
+    brings it back). Hidden, not removed: the search text, the list's scroll and the
+    panel's position are all still there afterwards. The shop-ahead alert still shows; it
+    is a safety warning, not decoration.
+  */
+  const [bare, setBare] = useState(false);
+  useEffect(() => {
+    if (!bare) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setBare(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [bare]);
   /** Shops for the chosen area, already distance-sorted by the data layer. */
   const areaShops = useMemo(
     () => shopsForArea(allShops, activeArea, settings.radiusM, filterOrigin),
@@ -371,13 +409,14 @@ export default function HomeScreen() {
   */
   const shops = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return areaShops;
-    return areaShops.filter(
+    const ofKind = kind ? areaShops.filter((shop) => shop.tags.includes(kind)) : areaShops;
+    if (!needle) return ofKind;
+    return ofKind.filter(
       (shop) =>
         shop.name.toLowerCase().includes(needle) ||
         shop.tags.some((tag) => tag.includes(needle)),
     );
-  }, [areaShops, query]);
+  }, [areaShops, query, kind]);
 
   /* The nearest shop, for the tutorial step that needs a shop open to point at. */
   const shopsRef = useRef<Shop[]>([]);
@@ -419,7 +458,12 @@ export default function HomeScreen() {
 
   /* An update waiting for a restart; "Later" hides the banner until the app next opens. */
   const updateReady = useUpdateReady();
+  /*
+    The reminder can be closed, but not for good: it shows again every time the app opens
+    or comes back to the front while the phone is not on the newest version (Clint, 1 Nov).
+  */
   const [updateLater, setUpdateLater] = useState(false);
+  useUpdateOnReturn(useCallback(() => setUpdateLater(false), []));
 
   const hasPosition = gate.position !== null;
   const tourSteps = useMemo<TourStep[]>(
@@ -494,19 +538,24 @@ export default function HomeScreen() {
     const timer = setTimeout(startTour, 900);
     return () => clearTimeout(timer);
   }, [settings.onboarded, settings.tourDone, startTour]);
+  /* The rider questions are asked once, required, on the welcome screen (welcome.tsx). */
+
   /*
-    THE RIDER QUESTIONS POPUP. Once per rider, never on top of anything:
-    not before the welcome screen is done, not while the tutorial runs (on first launch
-    it appears as the tutorial ends), not over the location card. A rider who already
-    answered on an older version is never asked again.
+    OUTSIDE METRO MANILA (Clint, 3 Nov). Ayoos only has shops inside the covered box, and
+    the map is held inside it, so a rider standing outside cannot even see themselves on
+    it. They are told once per session, the first time it is noticed, never on top of the
+    tutorial or the location card; a quiet banner stays while they are outside and repeats
+    the explanation on tap. Covering more places is planned, not promised, so the words
+    say "plan".
   */
-  const alreadyAnswered = Object.keys(settings.survey ?? {}).length > 0;
+  const outside = !!gate.position && !insideCoverage(gate.position);
+  const toldOutside = useRef(false);
+  const explainOutside = useCallback(() => Alert.alert(t.outsideTitle, t.outsideBody, [{ text: t.gotIt }]), [t]);
   useEffect(() => {
-    if (!settings.onboarded || !settings.tourDone || tourRunning || cardOpen) return;
-    if (settings.surveyState !== 'unasked' || alreadyAnswered) return;
-    const timer = setTimeout(() => setSurveyAsk(true), 700);
-    return () => clearTimeout(timer);
-  }, [settings.onboarded, settings.tourDone, settings.surveyState, tourRunning, cardOpen, alreadyAnswered]);
+    if (!outside || toldOutside.current || tourRunning || cardOpen) return;
+    toldOutside.current = true;
+    explainOutside();
+  }, [outside, tourRunning, cardOpen, explainOutside]);
 
   /* Tour targets on this screen. Stable functions, so a re-render never re-registers. */
   const helpRef = useCallback((n: View | null) => tourRegister('help', n), [tourRegister]);
@@ -522,149 +571,6 @@ export default function HomeScreen() {
   return (
     <TourProvider tour={tour}>
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
-      {/*
-        Everything that answers "where am I looking" lives in the band: the wordmark,
-        search, the city and settings. Everything below it is results.
-      */}
-      <BrandHeader>
-        <View style={s.bandTop}>
-          <Wordmark size={25} />
-          <Text style={s.bandArea} numberOfLines={1}>
-            {activeArea || nearMeOn || settings.radiusM != null
-              ? placeName.toUpperCase()
-              : 'METRO MANILA'}
-          </Text>
-          <View style={s.grow} />
-          {/*
-            SHOW / HIDE SEARCH. Folding the box away gives the map more room;
-            the choice is remembered. A magnifier, so it reads as "search" at a glance.
-          */}
-          <Pressable
-            onPress={() => {
-              if (!settings.searchHidden) {
-                setQuery('');
-                Keyboard.dismiss();
-              }
-              update({ searchHidden: !settings.searchHidden });
-            }}
-            style={({ pressed }) => [s.bandIconBtn, pressed && s.pressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={settings.searchHidden ? t.showSearch : t.hideSearch}
-          >
-            <SearchIcon size={22} color={theme.bandInk} />
-          </Pressable>
-          {/*
-            HELP, where it can always be found. Replays the tutorial. A question mark
-            rather than a word: it is understood without reading, and it is the mark the
-            tutorial's last step points at.
-          */}
-          <Pressable
-            ref={helpRef}
-            onPress={() => (tourRunning ? tourNotify('help') : startTour())}
-            style={s.bandIconBtn}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t.help}
-          >
-            <Text style={s.helpGlyph}>?</Text>
-          </Pressable>
-          {/* MY SHOPS: saved, visited and rated, on this phone. */}
-          <Pressable
-            onPress={() => router.push('/my-shops')}
-            style={s.bandIconBtn}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t.myShops}
-          >
-            <SavedIcon on={false} size={20} color={theme.bandInk} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/settings')}
-            style={s.bandIconBtn}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t.settings}
-          >
-            <GearIcon size={19} color={theme.bandInk} />
-          </Pressable>
-        </View>
-
-        {!settings.searchHidden && (
-          <View style={s.searchWrap}>
-            <TextInput
-              value={query}
-              onChangeText={(text) => {
-                setQuery(text);
-                setSuggestOpen(true);
-              }}
-              onSubmitEditing={submitSearch}
-              placeholder={t.findShop}
-              placeholderTextColor={theme.ink3}
-              style={s.search}
-              returnKeyType="search"
-              autoCorrect={false}
-              accessibilityLabel={t.findShop}
-            />
-            {/* The magnifier is a button: it does what the keyboard's search key does. */}
-            <Pressable
-              onPress={submitSearch}
-              style={s.searchIconBtn}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t.findShop}
-            >
-              <SearchIcon size={22} color={theme.ink3} />
-            </Pressable>
-            {query.length > 0 && (
-              <Pressable onPress={() => setQuery('')} style={s.clearBtn} hitSlop={8}>
-                <Text style={s.clearGlyph}>✕</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {!settings.searchHidden && suggestOpen && suggestions.length > 0 && (
-          <View style={s.suggestBox}>
-            {suggestions.map((shop) => (
-              <Pressable
-                key={shop.id}
-                onPress={() => pickSuggestion(shop)}
-                style={({ pressed }) => [s.suggestRow, pressed && s.rowPressed]}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${shop.name}`}
-              >
-                <Text style={s.suggestName} numberOfLines={1}>
-                  {shop.name}
-                </Text>
-                <Text style={s.suggestMeta} numberOfLines={1}>
-                  ≈ {splitDistance(shop.distance_m).value} {t.km.toLowerCase()} · {AREA_LABELS[shop.area]}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        <View style={s.bandBottom}>
-          <Pressable
-            onPress={() => setCityOpen(true)}
-            style={s.cityPill}
-            accessibilityRole="button"
-            accessibilityLabel="Change city"
-          >
-            {/* The pin says "measured from where you are", not "limited to this city". */}
-            {nearMeOn && <NavIcon size={15} color={theme.bandInk} />}
-            <Text style={s.cityPillText} numberOfLines={1}>
-              {placeName}
-            </Text>
-            <ExpandIcon open={false} size={18} color={theme.bandInk2} />
-          </Pressable>
-          {/*
-            The list's date is not shown here; it appears in the offline banner, the moment
-            it matters (ConnectionBanner.tsx).
-          */}
-        </View>
-      </BrandHeader>
 
       {/*
         The map is the screen now. It sits behind everything below the band and fills
@@ -690,6 +596,7 @@ export default function HomeScreen() {
             <RealMap
             shops={shops}
             visited={personal.data.visited}
+            recent={personal.data.recent}
             focus={focus}
             /* A pin opens the shop in the panel, exactly as its list row does. */
             onPressPin={openFromTap}
@@ -732,16 +639,140 @@ export default function HomeScreen() {
             heading={gate.heading}
             course={gate.course}
             /* Everything below the sheet's top edge is hidden, so controls sit above it. */
-            obscuredBottom={stageH - sheetTop(sheetAt, stageH)}
+            obscuredBottom={bare ? 0 : stageH - sheetTop(sheetAt, stageH, headerH)}
+            obscuredTop={bare ? 0 : headerH}
             mapHidden={sheetAt === 'list'}
+            bare={bare}
+            onToggleBare={() => setBare((b) => !b)}
             />
         </MapBoundary>
+
+        {/*
+          FLOATING SEARCH (1.2.0 redesign). The rust band is gone: the map runs edge to edge
+          and the controls float over it, so the map is the screen. The panel stops below
+          this card (ShopSheet `topInset`), and the notices sit under it.
+        */}
+        <View
+          style={[s.floatTop, bare && s.bareHidden]}
+          onLayout={(e: LayoutChangeEvent) => setHeaderH(Math.round(e.nativeEvent.layout.height))}
+          pointerEvents={bare ? 'none' : 'box-none'}
+        >
+          <View style={[s.searchCard, light && s.flat]}>
+            <Wordmark size={21} color={theme.accent} />
+            <View style={s.cardDivider} />
+            <Pressable onPress={submitSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.findShop}>
+              <SearchIcon size={20} color={theme.ink3} />
+            </Pressable>
+              <TextInput
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setSuggestOpen(true);
+                }}
+                onSubmitEditing={submitSearch}
+                placeholder={t.findShop}
+                placeholderTextColor={theme.ink3}
+                style={s.searchInput}
+                returnKeyType="search"
+                autoCorrect={false}
+                accessibilityLabel={t.findShop}
+              />
+            {query.length > 0 && (
+              <Pressable onPress={() => setQuery('')} style={s.cardBtn} hitSlop={8} accessibilityLabel="Clear search">
+                <Text style={s.clearGlyph}>✕</Text>
+              </Pressable>
+            )}
+            {/* MY SHOPS: saved, visited and rated, on this phone. */}
+            <Pressable onPress={() => router.push('/my-shops')} style={s.cardBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.myShops}>
+              <SavedIcon on={false} size={20} color={theme.ink2} />
+            </Pressable>
+            <Pressable onPress={() => router.push('/settings')} style={s.cardBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.settings}>
+              <GearIcon size={19} color={theme.ink2} />
+            </Pressable>
+          </View>
+
+          {suggestOpen && suggestions.length > 0 && (
+            <View style={s.suggestBox}>
+              {suggestions.map((shop) => (
+                <Pressable
+                  key={shop.id}
+                  onPress={() => pickSuggestion(shop)}
+                  style={({ pressed }) => [s.suggestRow, pressed && s.rowPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${shop.name}`}
+                >
+                  <Text style={s.suggestName} numberOfLines={1}>
+                    {shop.name}
+                  </Text>
+                  <Text style={s.suggestMeta} numberOfLines={1}>
+                    ≈ {splitDistance(shop.distance_m).value} {t.km.toLowerCase()} · {AREA_LABELS[shop.area]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* Shop types, Google Maps style. Sideways scroll on narrow phones. Not in Light. */}
+          {!light && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.kindRow} style={s.kindBleed}>
+            {KINDS.map((k) => {
+              const on = kind === k;
+              return (
+                <Pressable
+                  key={k}
+                  onPress={() => setKind(on ? null : k)}
+                  style={({ pressed }) => [s.kindChip, on && s.kindChipOn, pressed && s.rowPressed]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[s.kindText, on && s.kindTextOn]}>{kindLabel(t, k)}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          )}
+
+          <View style={s.chipLine} pointerEvents="box-none">
+            <Pressable
+              onPress={() => setCityOpen(true)}
+              style={[s.cityPill, light && s.flat]}
+              accessibilityRole="button"
+              accessibilityLabel="Change city"
+            >
+              {/* The pin says "measured from where you are", not "limited to this city". */}
+              {nearMeOn && <NavIcon size={15} color={theme.accent} />}
+              <Text style={s.cityPillText} numberOfLines={1}>
+                {placeName}
+              </Text>
+              <ExpandIcon open={false} size={18} color={theme.ink3} />
+            </Pressable>
+            <View style={s.grow} pointerEvents="none" />
+            {/*
+              HELP, where it can always be found. Replays the tutorial. A question mark
+              rather than a word: it is understood without reading, and it is the mark the
+              tutorial's last step points at.
+            */}
+            <Pressable
+              ref={helpRef}
+              onPress={() => (tourRunning ? tourNotify('help') : startTour())}
+              style={[s.roundBtn, light && s.flat]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t.help}
+            >
+              <Text style={s.helpGlyph}>?</Text>
+            </Pressable>
+          </View>
+        </View>
+
 
         {/*
           Stays until location is actually on. A rider who dismissed the card would
           otherwise have to relaunch the app to find the offer again.
         */}
-        <NoticeStack>
+        {!bare && (
+        <NoticeStack top={headerH + 6}>
+          {outside && <OutsideBanner onPress={explainOutside} />}
           {gate.status !== 'checking' &&
             gate.status !== 'ready' &&
             !cardOpen && (
@@ -782,14 +813,21 @@ export default function HomeScreen() {
             gate.accuracyM > 50 && (
               <AccuracyBanner accuracyM={gate.accuracyM} onPress={() => void gate.improveAccuracy()} />
             )}
-          {/*
-            A new version downloaded in the background while the app was open. One tap asks
-            to restart into it, so nobody has to close and reopen the app (lib/updates.ts).
-          */}
-          {updateReady && !updateLater && (
-            <UpdateBanner onPress={() => askToRestart(t, () => setUpdateLater(true))} />
-          )}
         </NoticeStack>
+        )}
+
+        {/*
+          A new version downloaded in the background: a small faded chip in the bottom-left
+          corner, above the map credit. One tap restarts into it, so nobody has to close and
+          reopen the app (lib/updates.ts).
+        */}
+        {updateReady && !updateLater && !bare && stageH > 0 && sheetAt !== 'list' && (
+          <UpdateChip
+            bottom={stageH - sheetTop(sheetAt, stageH, headerH) + 44}
+            onUpdate={() => void restartIntoUpdate()}
+            onClose={() => setUpdateLater(true)}
+          />
+        )}
 
         {aheadBanner && (
           <ShopAheadBanner
@@ -803,8 +841,10 @@ export default function HomeScreen() {
         )}
 
         {stageH > 0 && (
+          <View style={[StyleSheet.absoluteFill, bare && s.bareHidden]} pointerEvents={bare ? 'none' : 'box-none'}>
           <ShopSheet
             available={stageH}
+            topInset={headerH}
             position={sheetAt}
             onPositionChange={setSheetAt}
             /*
@@ -904,27 +944,6 @@ export default function HomeScreen() {
                     <Text style={s.reminderText}>Survey work is not exported yet. Tap to export it.</Text>
                   </Pressable>
                 )}
-                {settings.surveyState === 'later' ? (
-                  <View style={s.reminder}>
-                    <Text style={s.reminderText}>{t.surveyReminder}</Text>
-                    <View style={s.reminderButtons}>
-                      <Pressable
-                        onPress={() => router.push('/survey')}
-                        style={({ pressed }) => [s.reminderPrimary, pressed && s.pressed]}
-                        accessibilityRole="button"
-                      >
-                        <Text style={s.reminderPrimaryText}>{t.answerNow}</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => update({ surveyState: 'never' })}
-                        style={({ pressed }) => [s.reminderSecondary, pressed && s.pressed]}
-                        accessibilityRole="button"
-                      >
-                        <Text style={s.reminderSecondaryText}>{t.dontAskAgain}</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
                 </>
               }
               ListEmptyComponent={
@@ -937,23 +956,12 @@ export default function HomeScreen() {
             />
             )}
           </ShopSheet>
+          </View>
         )}
       </View>
 
       <ContactCard shop={contactShop} onClose={() => setContactShop(null)} />
 
-      <SurveyPrompt
-        visible={surveyAsk}
-        onAnswer={() => {
-          setSurveyAsk(false);
-          update({ surveyState: 'later' });
-          router.push('/survey');
-        }}
-        onLater={() => {
-          setSurveyAsk(false);
-          update({ surveyState: 'later' });
-        }}
-      />
 
       {cardOpen && gate.status !== 'checking' && gate.status !== 'ready' && (
         <LocationCard
@@ -1170,14 +1178,24 @@ function ShopRow({
       onPress={() => onOpen(shop)}
     >
       {/*
-        NAME FIRST, AND BIGGER. A big distance column on the left took a fifth of the row
-        and truncated the name; the name is what a rider reads first, so it gets the full
-        width and two lines.
+        THE DISTANCE BLOCK (1.2.0 design). Narrow on purpose: the earlier full-width
+        distance column truncated names, so this one is 52 px and the name keeps two lines.
+        Still marked as approximate in its spoken label: it is a road estimate.
       */}
+      <View style={s.distBlock} accessibilityLabel={`about ${value} ${t.km.toLowerCase()}`}>
+        <Text style={s.distBlockValue}>{value}</Text>
+        <Text style={s.distBlockUnit}>{t.km.toUpperCase()}</Text>
+      </View>
       <View style={s.rowBody}>
         <Text style={s.shopName} numberOfLines={2}>
           {shop.name}
         </Text>
+        {/* The address, already collected (P8): which street, before opening the shop. */}
+        {shop.address ? (
+          <Text style={s.rowAddress} numberOfLines={1}>
+            {shop.address}
+          </Text>
+        ) : null}
         {/*
           Rating first, because it is what draws a rider to a shop, with the count
           directly beneath it so a high average from two friends cannot mislead.
@@ -1210,13 +1228,6 @@ function ShopRow({
             {shop.tags.join(', ')}
           </Text>
         </View>
-        {/*
-          Distance, small, bottom left. Still marked ≈ ON the number: it is a road estimate
-          from a detour factor, not a measured route, and a bare figure would read as exact.
-        */}
-        <Text style={s.distSmall}>
-          ≈ {value} {t.km.toLowerCase()}
-        </Text>
         {marks.length > 0 && <Text style={s.marks}>{marks.join(' · ')}</Text>}
       </View>
 
@@ -1246,6 +1257,13 @@ function ShopRow({
   );
 }
 
+/** The chips, most needed first: a rider with a broken bike wants repair. */
+const KINDS: ShopTag[] = ['repair', 'parts', 'dealer', 'accessories'];
+
+function kindLabel(t: Strings, k: ShopTag): string {
+  return { repair: t.kindRepair, parts: t.kindParts, dealer: t.kindDealer, accessories: t.kindAccessories }[k];
+}
+
 const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.bg },
@@ -1258,9 +1276,63 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     stage: { flex: 1, position: 'relative', overflow: 'hidden' },
     grow: { flex: 1 },
 
-    bandTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    bandArea: { fontSize: 10.5, fontWeight: '700', letterSpacing: 1.2, color: theme.bandInk2, marginTop: 4 },
-    helpGlyph: { fontSize: 18, fontWeight: '800', color: theme.bandInk, lineHeight: 22 },
+    /* The floating search card and the chip row under it. */
+    floatTop: { position: 'absolute', left: 14, right: 14, top: 10, gap: 8, zIndex: 10, elevation: 10 },
+    searchCard: {
+      height: 54,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingLeft: 14,
+      paddingRight: 6,
+      elevation: 8,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.16,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    cardDivider: { width: 1, height: 24, backgroundColor: theme.line },
+    searchInput: { flex: 1, height: 54, fontSize: 15, color: theme.ink, paddingVertical: 0 },
+    cardBtn: { width: 36, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    chipLine: { flexDirection: 'row', alignItems: 'center' },
+    /* Runs to the screen edges so a scrolled chip is not cut at the card's margin. */
+    kindBleed: { marginHorizontal: -14 },
+    /* Map only: hidden but kept, so nothing resets (see `bare`). */
+    bareHidden: { opacity: 0 },
+    /* Graphics: Light. No shadow (cheaper to draw), a thin outline instead. */
+    flat: { elevation: 0, shadowOpacity: 0, borderWidth: 1, borderColor: theme.line },
+    kindRow: { paddingHorizontal: 14, gap: 8 },
+    kindChip: {
+      height: 36,
+      paddingHorizontal: 16,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      elevation: 4,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    kindChipOn: { backgroundColor: theme.ink },
+    kindText: { fontSize: 14, fontWeight: '600', color: theme.ink },
+    kindTextOn: { color: theme.bg },
+    roundBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 5,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.14,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    helpGlyph: { fontSize: 17, fontWeight: '800', color: theme.ink2, lineHeight: 21 },
     bandIconBtn: {
       width: 34,
       height: 34,
@@ -1275,16 +1347,21 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
 
     /* Small on purpose: the app bar has to hold more controls later. */
     cityPill: {
-      maxWidth: 170,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: theme.bandChip,
+      maxWidth: 210,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
       paddingHorizontal: 12,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      elevation: 5,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.14,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
     },
-    cityPillText: { fontSize: 13, fontWeight: '700', color: theme.bandInk, flexShrink: 1 },
+    cityPillText: { fontSize: 13, fontWeight: '700', color: theme.ink, flexShrink: 1 },
 
 
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -1331,10 +1408,13 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     /* Sits directly under the search box, inside the band, so nothing floats over the map. */
     suggestBox: {
       backgroundColor: theme.surface,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.line,
+      borderRadius: 14,
       overflow: 'hidden',
+      elevation: 8,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.16,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
     },
     suggestRow: {
       minHeight: 52,
@@ -1408,7 +1488,29 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       for it: at 14 and a 48px contact button there were 136dp left for the name on a
       360dp phone, which truncates most real shop names. This buys back 16.
     */
-    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 13 },
+    /* A card per shop, lifted off the panel by a soft shadow. */
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginHorizontal: 12,
+      marginVertical: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      borderRadius: 16,
+      backgroundColor: theme.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.line,
+      elevation: 2,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    distBlock: { width: 52, paddingVertical: 7, borderRadius: 12, backgroundColor: theme.callFill, alignItems: 'center' },
+    distBlockValue: { fontSize: 19, fontWeight: '800', color: theme.ink, letterSpacing: -0.4, fontVariant: ['tabular-nums'] },
+    distBlockUnit: { fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: theme.ink3, marginTop: 1 },
+    rowAddress: { fontSize: 12.5, color: theme.ink3 },
     /*
       Wider than it looks like it needs to be. The detour factor makes every number
       bigger, and with the All chip a shop can sit 12 km out, so the column has to
@@ -1433,10 +1535,23 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     pillUnknown: { backgroundColor: theme.mapBg },
     pillUnknownText: { color: theme.ink2 },
 
-    callBtn: { width: 44, height: 44, borderRadius: 11, backgroundColor: theme.call, alignItems: 'center', justifyContent: 'center' },
-    callBtnEmpty: { width: 44, height: 44 },
+    /* Raised: the one action in the row that leaves the app. */
+    callBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      backgroundColor: theme.call,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 4,
+      shadowColor: theme.call,
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    callBtnEmpty: { width: 48, height: 48 },
     /* Visible feedback the moment a finger lands, so a tap never feels ignored. */
-    rowPressed: { backgroundColor: theme.lineSoft },
+    rowPressed: { backgroundColor: theme.lineSoft, transform: [{ scale: 0.99 }] },
     pressed: { opacity: 0.6 },
 
 

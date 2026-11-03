@@ -51,11 +51,16 @@ export type SheetPosition = 'list' | 'both' | 'map';
  */
 export const STRIP_HEIGHT = 82;
 
-/** How far down the panel's top edge sits, in pixels, for each position. */
-export function sheetTop(position: SheetPosition, available: number): number {
-  if (position === 'list') return 0;
-  if (position === 'both') return Math.round(available * 0.3);
-  return Math.max(available - STRIP_HEIGHT, 0);
+/**
+ * How far down the panel's top edge sits, in pixels, for each position.
+ *
+ * `topInset` is what floats over the top of the map (the search card, 1.2.0): the panel's
+ * highest position stops under it instead of sliding beneath it.
+ */
+export function sheetTop(position: SheetPosition, available: number, topInset = 0): number {
+  if (position === 'list') return topInset;
+  if (position === 'both') return topInset + Math.round((available - topInset) * 0.3);
+  return Math.max(available - STRIP_HEIGHT, topInset);
 }
 
 /** Top to bottom, which is also the order of `sheetTop`. */
@@ -70,8 +75,11 @@ export function ShopSheet({
   available,
   position,
   onPositionChange,
+  topInset = 0,
 }: {
   children: ReactNode;
+  /** Height of what floats over the top of the map; the panel stops below it. */
+  topInset?: number;
   /** Controls that sit above the list AND form part of the drag target. */
   header?: ReactNode;
   /** Height the panel can travel within: the area under the band. */
@@ -85,15 +93,15 @@ export function ShopSheet({
   const s = styles(theme);
   const grabRef = useTourTarget('sheet-grab');
 
-  const y = useSharedValue(sheetTop(position, available));
+  const y = useSharedValue(sheetTop(position, available, topInset));
   const start = useSharedValue(0);
 
   /* Whenever the wanted position (or the room available) changes, glide there. */
   useEffect(() => {
-    y.set(withSpring(sheetTop(position, available), SPRING));
-  }, [position, available, y]);
+    y.set(withSpring(sheetTop(position, available, topInset), SPRING));
+  }, [position, available, topInset, y]);
 
-  const tops = ORDER.map((p) => sheetTop(p, available));
+  const tops = ORDER.map((p) => sheetTop(p, available, topInset));
 
   /*
     `onStart`, `onUpdate` and `onEnd` run on the UI thread, which is why they only touch
@@ -159,7 +167,7 @@ export function ShopSheet({
         Padded by how far the panel has slid down, so its content ends where the screen
         does instead of below it (fix 1 above).
       */}
-      <View style={[s.body, { paddingBottom: sheetTop(position, available) }]}>{children}</View>
+      <View style={[s.body, { paddingBottom: sheetTop(position, available, topInset) }]}>{children}</View>
     </Animated.View>
   );
 }

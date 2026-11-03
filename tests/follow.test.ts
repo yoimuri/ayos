@@ -68,4 +68,7 @@ test('the map turns with the road while moving, holds at a light, then goes back
   assert.equal(bearingFor({ course: null, lastMovingAt: 0, now: 10_000, current: 120 }), 120);
   assert.equal(bearingFor({ course: null, lastMovingAt: 0, now: 25_000, current: 120 }), 0);
   assert.equal(bearingFor({ course: null, lastMovingAt: null, now: 0, current: 0 }), 0);
+  /* Compass mode: stopped, the map turns with the phone; moving, the road ahead wins. */
+  assert.equal(bearingFor({ course: null, compass: 250, lastMovingAt: null, now: 0, current: 0 }), 250);
+  assert.equal(bearingFor({ course: 120, compass: 250, lastMovingAt: 0, now: 0, current: 0 }), 120);
 });

@@ -136,7 +136,7 @@ export default function FieldworkScreen() {
         ))}
 
         <Text style={s.heading}>Changes ({log.length})</Text>
-        {log.length === 0 && <Text style={s.help}>No changes yet. Open a shop and tap “Update shop info”.</Text>}
+        {log.length === 0 && <Text style={s.help}>No changes yet. Open a shop and tap “Pin exact location”.</Text>}
         {log.map((e) => (
           <View key={e.id} style={s.card}>
             <Text style={s.cardTitle}>
