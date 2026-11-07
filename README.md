@@ -310,7 +310,7 @@ Eleventh over-the-air update to 1.3.0 (3 Nov 2026), not yet checked on a phone:
   stays while they are outside (tap it to see why again). The map itself stays held inside
   Metro Manila
 
-Published over the air on 5 and 7 Nov 2026 (latest update 01a1b463), not yet checked on a phone:
+Published over the air on 5 and 7 Nov 2026 (latest update 01a1b497), not yet checked on a phone:
 
 - Your ride parts: four tabs (Bike, Rider, Helmet, Parts) with six outfits, five helmets in
   four colours, four exhausts, eight top boxes and three add-ons, on every vehicle. Each part
