@@ -35,7 +35,7 @@ import {
   OutsideBanner,
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
-import { NearestRepairPanel } from '@/components/NearestRepair';
+import { NearestShopsPanel } from '@/components/NearestShops';
 import { RealMap } from '@/components/RealMap';
 import { ShopAheadBanner } from '@/components/ShopAhead';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
@@ -48,7 +48,6 @@ import { useExportReminder } from '@/lib/fieldwork/store';
 import { overall } from '@/lib/personal/model';
 import { usePersonal } from '@/lib/personal/store';
 import { NO_ALERTS, nextAlert, type AheadOf, type AlertMemory } from '@/lib/nearby/ahead';
-import { nearestRepair } from '@/lib/nearby/nearestRepair';
 import { formatKm } from '@/lib/odometer/model';
 import { useOdometer } from '@/lib/odometer/store';
 import type { Shop, ShopTag } from '@/lib/data/types';
@@ -225,18 +224,18 @@ export default function HomeScreen() {
   /* Held so the wordmark can send a long list back to the top. */
   const listRef = useRef<FlatList<Shop>>(null);
 
-  /* NEAREST REPAIR: the panel over the shop list, and how tall it is, so the map lifts clear of it. */
-  const [repairOpen, setRepairOpen] = useState(false);
-  const [repairH, setRepairH] = useState(0);
+  /* NEAREST SHOP: the panel over the shop list, and how tall it is, so the map lifts clear of it. */
+  const [nearestOpen, setNearestOpen] = useState(false);
+  const [nearestH, setNearestH] = useState(0);
   /* Back closes this panel first. Registered after the shop's handler, so it is asked first. */
   useEffect(() => {
-    if (!repairOpen) return;
+    if (!nearestOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setRepairOpen(false);
+      setNearestOpen(false);
       return true;
     });
     return () => sub.remove();
-  }, [repairOpen]);
+  }, [nearestOpen]);
 
   /* The city just tapped on the zoomed-out map: its name and count, in a small card. */
   const [cityCard, setCityCard] = useState<Area | null>(null);
@@ -627,7 +626,7 @@ export default function HomeScreen() {
             focus={focus}
             /* A pin opens the shop in the panel, exactly as its list row does. */
             onPressPin={openFromTap}
-            centerBias={repairOpen ? 0 : sheetAt === 'map' ? 0.47 : 0.3}
+            centerBias={nearestOpen ? 0 : sheetAt === 'map' ? 0.47 : 0.3}
             online={online !== false}
             rider={gate.position}
             riderLive={gate.status === 'ready' && !gate.stale}
@@ -676,7 +675,7 @@ export default function HomeScreen() {
             heading={gate.heading}
             course={gate.course}
             /* Everything below the sheet's top edge is hidden, so controls sit above it. */
-            obscuredBottom={bare ? 0 : repairOpen ? repairH : stageH - sheetTop(sheetAt, stageH, headerH)}
+            obscuredBottom={bare ? 0 : nearestOpen ? nearestH : stageH - sheetTop(sheetAt, stageH, headerH)}
             obscuredTop={bare ? 0 : headerH}
             mapHidden={sheetAt === 'list'}
             bare={bare}
@@ -880,7 +879,7 @@ export default function HomeScreen() {
         )}
 
         {/* The city just tapped, and how many shops it has: where the numbers went. */}
-        {cityCard && !bare && !repairOpen && stageH > 0 && sheetAt !== 'list' && (
+        {cityCard && !bare && !nearestOpen && stageH > 0 && sheetAt !== 'list' && (
           <View
             style={[s.cityCard, light && s.flat, { bottom: stageH - sheetTop(sheetAt, stageH, headerH) + (updateReady && !updateLater ? 88 : 44) }]}
           >
@@ -932,22 +931,17 @@ export default function HomeScreen() {
               ) : (
               <>
                 {/*
-                  NEAREST REPAIR, in the panel rather than floating over the map: the map's own
+                  NEAREST SHOP, in the panel rather than floating over the map: the map's own
                   buttons fill the strip of map above the panel, and a full-width bar there would
                   sit on them. In the panel it is always in reach, at the very bottom of the
                   screen when the map has the screen, and gone with the panel in Map only.
                 */}
                 <Pressable
-                  onPress={() => {
-                    setRepairOpen(true);
-                    const { open, unknown } = nearestRepair(allShops);
-                    const first = gate.position ? (open ?? unknown) : null;
-                    if (first) openShop(first);
-                  }}
-                  style={({ pressed }) => [s.repairBtn, pressed && s.pressed]}
+                  onPress={() => setNearestOpen(true)}
+                  style={({ pressed }) => [s.nearestBtn, pressed && s.pressed]}
                   accessibilityRole="button"
                 >
-                  <Text style={s.repairBtnText}>{t.nearestRepair}</Text>
+                  <Text style={s.nearestBtnText}>{t.nearestShop}</Text>
                 </Pressable>
                 {/* How far to look. Filters the map and the list together. */}
                 <View ref={radiusRef} collapsable={false}>
@@ -1044,14 +1038,14 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {repairOpen && !bare && (
-          <NearestRepairPanel
+        {nearestOpen && !bare && (
+          <NearestShopsPanel
             shops={allShops}
-            located={gate.position !== null}
+            rider={gate.position}
             selectedId={focus?.shop.id}
             onSelect={openShop}
-            onClose={() => setRepairOpen(false)}
-            onHeight={setRepairH}
+            onClose={() => setNearestOpen(false)}
+            onHeight={setNearestH}
           />
         )}
       </View>
@@ -1479,7 +1473,7 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
     },
     cityCardName: { fontSize: 16, fontWeight: '700', color: theme.ink },
     cityCardCount: { fontSize: 14, color: theme.ink2, marginTop: 1 },
-    repairBtn: {
+    nearestBtn: {
       height: 48,
       marginHorizontal: 12,
       marginBottom: 2,
@@ -1488,7 +1482,7 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    repairBtnText: { color: theme.onFilled, fontSize: 16, fontWeight: '800' },
+    nearestBtnText: { color: theme.onFilled, fontSize: 16, fontWeight: '800' },
 
 
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

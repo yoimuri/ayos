@@ -310,7 +310,7 @@ Eleventh over-the-air update to 1.3.0 (3 Nov 2026), not yet checked on a phone:
   stays while they are outside (tap it to see why again). The map itself stays held inside
   Metro Manila
 
-Published over the air on 5 and 7 Nov 2026 (latest update 01a1b423), not yet checked on a phone:
+Published over the air on 5 and 7 Nov 2026 (latest update 01a1b463), not yet checked on a phone:
 
 - Your ride parts: four tabs (Bike, Rider, Helmet, Parts) with six outfits, five helmets in
   four colours, four exhausts, eight top boxes and three add-ons, on every vehicle. Each part
@@ -329,12 +329,14 @@ Published over the air on 5 and 7 Nov 2026 (latest update 01a1b423), not yet che
 - Tapping a shop draws a line with arrows along the roads from the rider to the shop, once per
   tap, in motorcycle mode and avoiding expressways, tolls and ferries. Demo only: it uses a free
   public route server (FOSSGIS Valhalla), needs internet, and sends the rider's position to that
-  server on each tap. It only knows motorcycle bans marked in OpenStreetMap, so riders still follow
+  server on each request. It only knows motorcycle bans marked in OpenStreetMap, so riders still follow
   road signs. With no line, a straight arrow points toward the shop
 - The OpenStreetMap credit shows on the map for 5 seconds when the app opens, and the info button
   has the full credit and a link to report a map error
-- Nearest repair button: the nearest repair shop known to be open, the nearest with unknown
-  hours that can be phoned, and a Call 911 button that opens the dialler
+- Nearest shop button: pick Repair, Parts, Dealers or Accessories and get up to 3 shops, open
+  ones first, ranked by real road distance from the same route server, with an estimate marked
+  "≈" when there is no signal. A shop with unknown hours only appears if it can be phoned. A Call
+  911 button opens the dialler
 - Odometer, in Settings > Map and riding: Start ride and End ride add up kilometres while the
   app is open with the screen on, and the bike's reading can be typed by hand. Only the numbers
   are kept, on the phone, never a position or a route

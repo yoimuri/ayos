@@ -10,7 +10,7 @@ import { useSettings } from '@/lib/settings/store';
  * The panel under the map: the shop list, or one shop. It rests in one of three places,
  * and the rider drags between them:
  *
- *   MAP     only the grab bar, Nearest repair and the radius chips show; the map has the screen
+ *   MAP     only the grab bar, Nearest shop and the radius chips show; the map has the screen
  *   BOTH    the default: map above, list below
  *   LIST    the list has the screen, the map is hidden behind it
  *
@@ -46,7 +46,7 @@ import { useSettings } from '@/lib/settings/store';
 export type SheetPosition = 'list' | 'both' | 'map';
 
 /**
- * The part of the panel still showing in Map mode: the grab bar, Nearest repair and the radius
+ * The part of the panel still showing in Map mode: the grab bar, Nearest shop and the radius
  * chips. All worth keeping in view there, and a bare bar alone would be too thin to grab.
  */
 export const STRIP_HEIGHT = 132;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
-import { decodeShape, fetchRoadLine, readRoute, routeRequest } from '../src/lib/map/roadLine.ts';
+import { decodeShape, distancesRequest, fetchRoadKm, fetchRoadLine, readDistances, readRoute, routeRequest } from '../src/lib/map/roadLine.ts';
 
 /** The same encoding the server uses: 6 decimals, latitude first, each point relative to the last. */
 function encode(points: [number, number][]): string {
@@ -62,6 +62,25 @@ test('the request asks for motorcycle mode and to stay off all three', () => {
   assert.deepEqual(r.locations[0], { lon: 121, lat: 14.6 });
 });
 
+test('road distances come back in the order asked, with null for a shop that cannot be reached', () => {
+  const answer = { sources_to_targets: [[{ distance: 1.3 }, { distance: null }, { distance: 2 }]] };
+  assert.deepEqual(readDistances(answer, 3), [1.3, null, 2]);
+});
+
+test('a distances answer that does not line up with the question is no answer', () => {
+  for (const bad of [null, {}, { sources_to_targets: [] }, { sources_to_targets: [[{ distance: 1 }]] }]) {
+    assert.equal(readDistances(bad, 2), null);
+  }
+});
+
+test('one request carries every shop, in motorcycle mode, staying off all three', () => {
+  const r = distancesRequest([121, 14.6], [[121.1, 14.7], [121.2, 14.8]]);
+  assert.deepEqual(r.sources, [{ lon: 121, lat: 14.6 }]);
+  assert.equal(r.targets.length, 2);
+  assert.equal(r.costing, 'motorcycle');
+  assert.deepEqual(r.costing_options.motorcycle, { use_highways: 0, use_tolls: 0, use_ferry: 0 });
+});
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -90,6 +109,18 @@ test('no connection, or a server error, is no line', async () => {
   assert.equal(await fetchRoadLine([121, 14.6], [121.1, 14.7], signal), null);
   globalThis.fetch = (async () => ({ ok: false })) as unknown as typeof fetch;
   assert.equal(await fetchRoadLine([121, 14.6], [121.1, 14.7], signal), null);
+});
+
+test('distances and the road line asked at once still go a second apart', async () => {
+  const at: number[] = [];
+  globalThis.fetch = (async () => {
+    at.push(Date.now());
+    return { ok: false };
+  }) as unknown as typeof fetch;
+  const signal = new AbortController().signal;
+  await Promise.all([fetchRoadKm([121, 14.6], [[121.1, 14.7]], signal), fetchRoadLine([121, 14.6], [121.1, 14.7], signal)]);
+  assert.equal(at.length, 2);
+  assert.ok(Math.abs(at[1] - at[0]) >= 990, `${Math.abs(at[1] - at[0])} ms apart`);
 });
 
 test('a tap cancelled before its turn never reaches the server', async () => {
