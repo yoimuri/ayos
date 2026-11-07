@@ -629,6 +629,7 @@ export default function HomeScreen() {
             centerBias={nearestOpen ? Math.max(0, 1 - nearestH / 400) : sheetAt === 'map' ? 0.47 : 0.3}
             online={online !== false}
             rider={gate.position}
+            riderAccuracyM={gate.accuracyM}
             riderLive={gate.status === 'ready' && !gate.stale}
             settling={gate.finding}
             onRecentre={() => {
@@ -879,7 +880,7 @@ export default function HomeScreen() {
         )}
 
         {/* The city just tapped, and how many shops it has: where the numbers went. */}
-        {cityCard && !bare && !nearestOpen && stageH > 0 && sheetAt !== 'list' && (
+        {cityCard && !focus && !bare && !nearestOpen && stageH > 0 && sheetAt !== 'list' && (
           <View
             style={[s.cityCard, light && s.flat, { bottom: stageH - sheetTop(sheetAt, stageH, headerH) + (updateReady && !updateLater ? 88 : 44) }]}
           >

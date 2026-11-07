@@ -51,3 +51,26 @@ export function rankByRoad(list: Shop[], roadKm: (number | null)[] | null): Near
     .sort((a, b) => open(a) - open(b) || (roadKm ? far(a) - far(b) : 0) || byStraightLine(a.shop, b.shop))
     .slice(0, SHOWN);
 }
+
+/** Moving at least this far gets new road distances while the panel is open. */
+export const REFRESH_MOVED_M = 300;
+/** And no more often than this, however fast the rider goes: a volunteer-run server answers these. */
+export const REFRESH_EVERY_MS = 30_000;
+
+export function shouldRefresh(lastFrom: [number, number], lastAt: number, rider: [number, number], now: number): boolean {
+  if (now - lastAt < REFRESH_EVERY_MS) return false;
+  const k = 111_320;
+  const moved = Math.hypot((rider[0] - lastFrom[0]) * k * Math.cos((rider[1] * Math.PI) / 180), (rider[1] - lastFrom[1]) * k);
+  return moved >= REFRESH_MOVED_M;
+}
+
+/**
+ * The shop the rider has selected stays on screen when the list refreshes, even if it is no longer in
+ * the nearest 3: it takes the last place, marked as an estimate. A different kind of shop does not
+ * count, because the rider has just asked for another kind.
+ */
+export function withSelected(nearby: NearbyShop[], selected: Shop | undefined, kind: ShopTag): NearbyShop[] {
+  if (!selected || !selected.tags.includes(kind) || nearby.some((x) => x.shop.id === selected.id)) return nearby;
+  return [...nearby.slice(0, SHOWN - 1), { shop: selected, roadKm: null }];
+}
+

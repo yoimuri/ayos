@@ -34,6 +34,7 @@ import { METRO_MANILA } from '@/lib/geo/coverage';
 import { bearingTo, DETOUR_FACTOR } from '@/lib/geo/distance';
 import { bearingFor, busyUntil, checkResume, fitPadding, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
 import { fetchRoadLine } from '@/lib/map/roadLine';
+import { advanceRoute, REROUTE_GAP_MS, startRoute, type RouteProgress } from '@/lib/map/routeProgress';
 import { AREA_CENTRES, useSettings, type Area } from '@/lib/settings/store';
 
 /**
@@ -419,8 +420,11 @@ export function RealMap({
   recent,
   onPressCity,
   selectedCity = null,
+  riderAccuracyM = null,
 }: {
   shops: Shop[];
+  /** How rough the rider's position is, in metres. A rough reading never counts as leaving the road line. */
+  riderAccuracyM?: number | null;
   /** A coloured city was tapped, on the zoomed-out map. */
   onPressCity?: (area: Area) => void;
   /** The city just tapped: its outline stays drawn after zooming in. */
@@ -893,28 +897,66 @@ export function RealMap({
       : null;
 
   /*
-    THE ROAD LINE (Charls, 7 Nov, demo only): asked for ONCE PER TAP, from where the rider is at
-    that moment, so `nonce` is what triggers it and riding on does not. Tapping again redraws it.
-    Until it arrives, and whenever it does not, the rider has the straight arrow above.
+    THE ROAD LINE (demo only). Asked for when a shop is tapped, from where the rider is then, going the
+    way they are going. After that it follows them (lib/map/routeProgress.ts): the part behind the bike
+    goes away, and leaving the line asks for a new one. Until it arrives, and whenever there is none,
+    the rider has the straight arrow above.
   */
-  const [roadLine, setRoadLine] = useState<{ shopId: string; feature: GeoJSON.Feature } | null>(null);
+  const [route, setRoute] = useState<RouteProgress | null>(null);
+  /* Each new live reading moves the rider along the line, in the same frame the bike moves. */
+  const [seenRider, setSeenRider] = useState(rider);
+  if (rider !== seenRider) {
+    setSeenRider(rider);
+    if (route && rider && riderLive) setRoute(advanceRoute(route, rider, riderAccuracyM));
+  }
+  const rerouting = useRef<AbortController | null>(null);
+  const lastReroute = useRef(0);
+
   useEffect(() => {
     if (!rider || focusId === undefined || focusLng === undefined || focusLat === undefined || straightArrow === null) return;
+    rerouting.current?.abort();
     const cancel = new AbortController();
     const shopId = focusId;
-    fetchRoadLine(rider, [focusLng, focusLat], cancel.signal).then((coordinates) => {
+    fetchRoadLine(rider, [focusLng, focusLat], cancel.signal, course).then((line) => {
       if (cancel.signal.aborted) return;
-      setRoadLine(
-        coordinates
-          ? { shopId, feature: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } } }
-          : null,
-      );
+      setRoute(line ? startRoute(shopId, line, rider) : null);
     });
     return () => cancel.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.nonce]);
+
+  /*
+    OFF THE LINE: ask for a new one, at most every 20 seconds, however often the GPS reports. With no
+    answer the old line is not drawn as if it were right: the rider gets the straight arrow, and this
+    tries again until there is signal.
+  */
+  useEffect(() => {
+    if (!route?.offRoute || !rider || route.shopId !== focusId || focusLng === undefined || focusLat === undefined) return;
+    const now = Date.now();
+    if (now - lastReroute.current < REROUTE_GAP_MS) return;
+    lastReroute.current = now;
+    rerouting.current?.abort();
+    const cancel = new AbortController();
+    rerouting.current = cancel;
+    const shopId = route.shopId;
+    fetchRoadLine(rider, [focusLng, focusLat], cancel.signal, course).then((line) => {
+      if (cancel.signal.aborted) return;
+      setRoute((r) => {
+        if (!r || r.shopId !== shopId) return r;
+        return line ? startRoute(shopId, line, rider) : { ...r, lost: true };
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seenRider]);
+  useEffect(() => () => rerouting.current?.abort(), []);
+
   /* Only for the shop it was drawn to. Closing the shop, or opening another, takes it away. */
-  const lineToShop = roadLine && roadLine.shopId === focusId ? roadLine.feature : null;
+  const routeHere = route && route.shopId === focusId ? route : null;
+  const remaining = routeHere && !routeHere.lost && !routeHere.arrived ? routeHere.remaining : null;
+  const lineToShop = useMemo(
+    () => (remaining ? ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: remaining } } as GeoJSON.Feature) : null),
+    [remaining],
+  );
 
   const s = styles(theme);
 
@@ -1500,7 +1542,7 @@ export function RealMap({
           frame={settings.map3d && !zoomedOut ? frameFor(heading, mapBearing) : null}
           pictures={ridePics.key}
           scale={sizeScale(settings.ride.size)}
-          arrow={lineToShop ? null : straightArrow}
+          arrow={lineToShop || routeHere?.arrived ? null : straightArrow}
         />
 
       </MapView>
@@ -1640,6 +1682,12 @@ export function RealMap({
       >
         <InfoIcon size={15} color={theme.ink3} />
       </Pressable>
+      {/* While a road line shows: it comes from map data that may not know a road has closed. */}
+      {lineToShop && !mapHidden && (
+        <View style={[s.creditLine, s.routeNote, { bottom: obscuredBottom + 42 }]} pointerEvents="none">
+          <Text style={s.creditText}>{t.roadLineNote}</Text>
+        </View>
+      )}
       {everLoaded && !creditDone && !mapHidden && (
         <View style={[s.creditLine, { bottom: obscuredBottom + 10 }]} pointerEvents="none">
           <Text style={s.creditText}>{CREDIT_LINE}</Text>
@@ -1746,6 +1794,7 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       opacity: 0.9,
     },
     creditText: { fontSize: 11, color: theme.ink2 },
+    routeNote: { left: 12 },
     attrib: {
       position: 'absolute',
       left: 12,

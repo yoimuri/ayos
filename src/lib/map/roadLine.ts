@@ -32,8 +32,14 @@ const MOTORCYCLE = {
 
 const place = ([lon, lat]: Point) => ({ lon, lat });
 
-export function routeRequest(from: Point, to: Point) {
-  return { locations: [place(from), place(to)], ...MOTORCYCLE, directions_type: 'none' };
+/**
+ * `heading`: the way the bike is going, degrees from north, so a route asked for while moving starts
+ * that way when it can. On test routes the server took it and only sometimes changed the route, so a
+ * route can still begin with a U-turn.
+ */
+export function routeRequest(from: Point, to: Point, heading: number | null = null) {
+  const start = heading === null ? place(from) : { ...place(from), heading: Math.round(heading) };
+  return { locations: [start, place(to)], ...MOTORCYCLE, directions_type: 'none' };
 }
 
 /** One request for many shops, so the one-a-second rule holds however many are asked about. */
@@ -135,8 +141,8 @@ async function ask(path: string, body: unknown, signal: AbortSignal): Promise<un
 }
 
 /** The road line for one tap. `signal` is how a newer tap cancels this one. */
-export async function fetchRoadLine(from: Point, to: Point, signal: AbortSignal): Promise<Point[] | null> {
-  return readRoute(await ask('/route', routeRequest(from, to), signal));
+export async function fetchRoadLine(from: Point, to: Point, signal: AbortSignal, heading: number | null = null): Promise<Point[] | null> {
+  return readRoute(await ask('/route', routeRequest(from, to, heading), signal));
 }
 
 /** Real road km from the rider to each shop, with one request. */

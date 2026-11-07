@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import type { Shop, ShopTag } from '../src/lib/data/types.ts';
 import { bearingTo } from '../src/lib/geo/distance.ts';
-import { rankByRoad, shortlist } from '../src/lib/nearby/nearestShops.ts';
+import { rankByRoad, shortlist, shouldRefresh, withSelected } from '../src/lib/nearby/nearestShops.ts';
 
 const shop = (id: string, distance_m: number, status: Shop['status'], phone: string | null, tags: ShopTag[] = ['repair']) =>
   ({ id, distance_m, status, phone, tags }) as Shop;
@@ -73,6 +73,24 @@ test('with no answer from the server, the straight line decides and no road dist
 test('a shop the server cannot reach by road goes last', () => {
   const shown = rankByRoad([shop('cut-off', 10, 'open', '1'), shop('reachable', 500, 'open', '1')], [null, 2]);
   assert.deepEqual(ids(shown.map((x) => x.shop)), ['reachable', 'cut-off']);
+});
+
+test('new road distances only after moving a real distance, and never too often', () => {
+  const from: [number, number] = [121, 14.6];
+  const far: [number, number] = [121, 14.604];
+  assert.equal(shouldRefresh(from, 0, far, 60_000), true);
+  assert.equal(shouldRefresh(from, 0, far, 20_000), false, 'too soon, however far');
+  assert.equal(shouldRefresh(from, 0, [121, 14.6005], 60_000), false, 'not far enough, however long');
+});
+
+test('the selected shop stays on screen after a refresh, in the last place', () => {
+  const three = [shop('a', 1, 'open', '1'), shop('b', 2, 'open', '1'), shop('c', 3, 'open', '1')].map((s) => ({ shop: s, roadKm: 1 }));
+  const kept = withSelected(three, shop('mine', 9, 'open', '1'), 'repair');
+  assert.deepEqual(ids(kept.map((x) => x.shop)), ['a', 'b', 'mine']);
+  assert.equal(kept[2].roadKm, null);
+  assert.deepEqual(withSelected(three, three[1].shop, 'repair'), three, 'already there');
+  assert.deepEqual(withSelected(three, undefined, 'repair'), three);
+  assert.deepEqual(withSelected(three, shop('parts', 9, 'open', '1', ['parts']), 'repair'), three, 'another kind');
 });
 
 test('the arrow: north is 0, and it goes round clockwise', () => {

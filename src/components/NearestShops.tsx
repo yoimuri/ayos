@@ -4,11 +4,14 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import type { Shop, ShopTag } from '@/lib/data/types';
 import { splitDistance } from '@/lib/geo/distance';
 import { fetchRoadKm } from '@/lib/map/roadLine';
-import { rankByRoad, shortlist } from '@/lib/nearby/nearestShops';
+import { rankByRoad, shortlist, shouldRefresh, withSelected } from '@/lib/nearby/nearestShops';
 import { useSettings } from '@/lib/settings/store';
 import type { Theme } from '@/lib/theme/tokens';
 
 const KINDS: ShopTag[] = ['repair', 'parts', 'dealer', 'accessories'];
+
+/** Where and when a list was asked for. Only ever called from a tap or an effect, never while drawing. */
+const stamp = (rider: [number, number]) => ({ rider, at: Date.now() });
 
 /**
  * The panel the Nearest shop button opens: a choice of kind, up to 3 shops (lib/nearby/nearestShops.ts)
@@ -19,8 +22,10 @@ const KINDS: ShopTag[] = ['repair', 'parts', 'dealer', 'accessories'];
  * rider with no signal still gets an answer, and re-order when the road distances arrive. Once they
  * have, the first card is selected, unless the rider already tapped one.
  *
- * THE LIST IS TAKEN ONCE, when the panel opens or a kind is picked, not on every GPS reading: the
- * cards should not shuffle under a finger, and each list costs a request to a volunteer-run server.
+ * IT FOLLOWS THE RIDER (Clint, 7 Nov: a passenger searching on a moving bike). The list and the road
+ * distances refresh after about 300 m, at most every 30 seconds, not on every GPS reading: the cards
+ * should not shuffle under a finger, and each list costs a request to a volunteer-run server. The
+ * selected shop stays selected. With no signal the refresh still happens, on estimates.
  *
  * 911 opens the phone's dialler with the number filled in; the rider still presses call, so a
  * mis-tap never reaches the emergency line. Unified 911 is the Philippines' national hotline.
@@ -49,6 +54,26 @@ export function NearestShopsPanel({
   const [road, setRoad] = useState<(number | null)[] | null>(null);
   /* The rider tapped a card, so the road distances arriving must not move the selection. */
   const tapped = useRef(false);
+  /* Where and when the list last came from, and the request still out. */
+  const last = useRef<{ rider: [number, number]; at: number } | null>(null);
+  const asking = useRef<AbortController | null>(null);
+
+  /* `first` selects the nearest shop once the answer is in. A refresh leaves the selection alone. */
+  const load = (forKind: ShopTag, first: boolean) => {
+    if (!rider) return;
+    const next = shortlist(shops, forKind);
+    last.current = stamp(rider);
+    asking.current?.abort();
+    const cancel = new AbortController();
+    asking.current = cancel;
+    fetchRoadKm(rider, next.map((shop) => [shop.lng, shop.lat]), cancel.signal).then((km) => {
+      if (cancel.signal.aborted) return;
+      setList(next);
+      setRoad(km);
+      const nearest = rankByRoad(next, km)[0];
+      if (first && nearest && !tapped.current) onSelect(nearest.shop);
+    });
+  };
 
   const pick = (next: ShopTag) => {
     if (next === kind) return;
@@ -56,21 +81,23 @@ export function NearestShopsPanel({
     setKind(next);
     setRoad(null);
     setList(rider ? shortlist(shops, next) : []);
+    load(next, true);
   };
 
   useEffect(() => {
-    if (!rider || list.length === 0) return;
-    const cancel = new AbortController();
-    fetchRoadKm(rider, list.map((shop) => [shop.lng, shop.lat]), cancel.signal).then((km) => {
-      if (cancel.signal.aborted) return;
-      setRoad(km);
-      const first = rankByRoad(list, km)[0];
-      if (first && !tapped.current) onSelect(first.shop);
-    });
-    return () => cancel.abort();
-    /* Once per list. `rider` moves with every GPS reading, and `onSelect` needs no new request. */
+    load(kind, true);
+    return () => asking.current?.abort();
+    /* Once, on opening. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list]);
+  }, []);
+
+  /* Each GPS reading: the first position if there was none on opening, then a refresh when due. */
+  useEffect(() => {
+    if (!rider) return;
+    if (!last.current) load(kind, true);
+    else if (shouldRefresh(last.current.rider, last.current.at, rider, Date.now())) load(kind, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rider]);
 
   const label: Record<ShopTag, string> = {
     repair: t.kindRepair,
@@ -78,7 +105,7 @@ export function NearestShopsPanel({
     dealer: t.kindDealer,
     accessories: t.kindAccessories,
   };
-  const nearby = rankByRoad(list, road);
+  const nearby = withSelected(rankByRoad(list, road), shops.find((shop) => shop.id === selectedId), kind);
 
   const card = (shop: Shop, roadKm: number | null) => {
     const isOpen = shop.status === 'open';

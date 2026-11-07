@@ -239,6 +239,7 @@ export type Strings = {
   /** Your ride: the bike drawn on the map. */
   /* Nearest shop, city areas and the ride counter (5 and 7 Nov). */
   nearestShop: string;
+  roadLineNote: string;
   call911: string;
   callFirst: string;
   noShopFound: string;
@@ -516,6 +517,7 @@ const en: Strings = {
 
   sectionMap: 'Map and riding',
   nearestShop: 'Nearest shop',
+  roadLineNote: 'Road line may not be up to date',
   call911: 'Call 911',
   callFirst: 'Call first',
   noShopFound: 'No shop found',
@@ -792,6 +794,7 @@ const tl: Strings = {
 
   sectionMap: 'Mapa at biyahe',
   nearestShop: 'Pinakamalapit na shop',
+  roadLineNote: 'Posibleng hindi updated ang road line',
   call911: 'Tumawag sa 911',
   callFirst: 'Tumawag muna',
   noShopFound: 'Walang nakitang shop',

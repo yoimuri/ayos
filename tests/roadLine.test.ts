@@ -62,6 +62,12 @@ test('the request asks for motorcycle mode and to stay off all three', () => {
   assert.deepEqual(r.locations[0], { lon: 121, lat: 14.6 });
 });
 
+test('the bike\'s direction goes with the start of the route, and only when it is known', () => {
+  assert.deepEqual(routeRequest([121, 14.6], [121.1, 14.7], 92.4).locations[0], { lon: 121, lat: 14.6, heading: 92 });
+  assert.deepEqual(routeRequest([121, 14.6], [121.1, 14.7]).locations[0], { lon: 121, lat: 14.6 });
+  assert.deepEqual(routeRequest([121, 14.6], [121.1, 14.7], 0).locations[0], { lon: 121, lat: 14.6, heading: 0 });
+});
+
 test('road distances come back in the order asked, with null for a shop that cannot be reached', () => {
   const answer = { sources_to_targets: [[{ distance: 1.3 }, { distance: null }, { distance: 2 }]] };
   assert.deepEqual(readDistances(answer, 3), [1.3, null, 2]);
