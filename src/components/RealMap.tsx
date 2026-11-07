@@ -32,7 +32,7 @@ import type { Shop } from '@/lib/data/types';
 import { CITY_AREAS } from '@/lib/geo/cityAreas.generated';
 import { METRO_MANILA } from '@/lib/geo/coverage';
 import { bearingTo, DETOUR_FACTOR } from '@/lib/geo/distance';
-import { bearingFor, busyUntil, checkResume, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
+import { bearingFor, busyUntil, checkResume, fitPadding, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
 import { fetchRoadLine } from '@/lib/map/roadLine';
 import { AREA_CENTRES, useSettings, type Area } from '@/lib/settings/store';
 
@@ -547,6 +547,11 @@ export function RealMap({
     [],
   );
 
+  const inset = useMemo(
+    () => ({ top: obscuredTop, bottom: Math.round(400 * (1 - centerBias)) }),
+    [centerBias, obscuredTop],
+  );
+
   /*
     Following: each new position eases the camera to it. Not while a shop is open, because
     then the camera is framing the shop and the rider together, and not before the
@@ -647,7 +652,7 @@ export function RealMap({
         Math.max(rider[1], shop[1]),
       ],
       {
-        padding: { top: obscuredTop + 40, left: 60, right: 60, bottom: Math.max(80, obscuredBottom * 0.25) },
+        padding: fitPadding({ hiddenTop: obscuredTop, hiddenBottom: obscuredBottom, insetTop: inset.top, insetBottom: inset.bottom }),
         pitch: tilt(),
         duration: 800,
       },
@@ -674,7 +679,7 @@ export function RealMap({
     const lats = shops.map((s) => s.lat);
     camera.current?.fitBounds(
       [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
-      { padding: { top: obscuredTop + 30, left: 50, right: 50, bottom: 80 }, duration: 600 },
+      { padding: fitPadding({ hiddenTop: obscuredTop, hiddenBottom: obscuredBottom, insetTop: inset.top, insetBottom: inset.bottom }), duration: 600 },
     );
     /* Once (framedAll): the card's height is read then, not watched. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -722,7 +727,7 @@ export function RealMap({
       return;
     }
     camera.current?.fitBounds(frame.bounds, {
-      padding: { top: obscuredTop + 40, left: 50, right: 50, bottom: Math.max(80, obscuredBottom * 0.25) },
+      padding: fitPadding({ hiddenTop: obscuredTop, hiddenBottom: obscuredBottom, insetTop: inset.top, insetBottom: inset.bottom }),
       duration: 800,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -781,11 +786,6 @@ export function RealMap({
         ? circleAround(ringCentre, radiusM / DETOUR_FACTOR)
         : null,
     [showRing, radiusM, ringCentre],
-  );
-
-  const inset = useMemo(
-    () => ({ top: obscuredTop, bottom: Math.round(400 * (1 - centerBias)) }),
-    [centerBias, obscuredTop],
   );
 
   /*

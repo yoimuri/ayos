@@ -626,7 +626,7 @@ export default function HomeScreen() {
             focus={focus}
             /* A pin opens the shop in the panel, exactly as its list row does. */
             onPressPin={openFromTap}
-            centerBias={nearestOpen ? 0 : sheetAt === 'map' ? 0.47 : 0.3}
+            centerBias={nearestOpen ? Math.max(0, 1 - nearestH / 400) : sheetAt === 'map' ? 0.47 : 0.3}
             online={online !== false}
             rider={gate.position}
             riderLive={gate.status === 'ready' && !gate.stale}

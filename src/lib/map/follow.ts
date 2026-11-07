@@ -102,3 +102,27 @@ export function bearingFor(s: {
   if (s.lastMovingAt !== null && s.now - s.lastMovingAt < PARKED_MS) return s.current;
   return 0;
 }
+
+/** Room above the points being framed, for a pin standing up from the shop. */
+const FIT_ROOM_TOP = 56;
+/** Room below them, for the bike's wheels and a little road. */
+const FIT_ROOM_BOTTOM = 32;
+const FIT_ROOM_SIDE = 60;
+
+/**
+ * THE PADDING FOR FRAMING PLACES, so they land in the part of the map a rider can see.
+ *
+ * THE MAP ALREADY KEEPS ITS CONTENT INSET CLEAR, AND THE LIBRARY ADDS THIS ON TOP (MapLibre's
+ * CameraStop.kt: `contentInset + padding`). Asking for the whole hidden area again counted it twice:
+ * with the Nearest shop panel open that left about 55 px to fit the rider and a shop into, and the
+ * map zoomed right out (Clint, 7 Nov). So this asks only for what the inset does not already cover.
+ */
+export function fitPadding(s: { hiddenTop: number; hiddenBottom: number; insetTop: number; insetBottom: number }) {
+  return {
+    top: Math.max(0, s.hiddenTop - s.insetTop) + FIT_ROOM_TOP,
+    bottom: Math.max(0, s.hiddenBottom - s.insetBottom) + FIT_ROOM_BOTTOM,
+    left: FIT_ROOM_SIDE,
+    right: FIT_ROOM_SIDE,
+  };
+}
+

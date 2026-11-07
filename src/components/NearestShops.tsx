@@ -175,8 +175,8 @@ const styles = (theme: Theme) =>
       left: 0,
       right: 0,
       bottom: 0,
-      /* Three cards scroll inside this, so the road line above still has room. */
-      maxHeight: '62%',
+      /* Cards scroll inside this, so the rider and the shop above it still have room. */
+      maxHeight: '55%',
       backgroundColor: theme.bg,
       borderTopLeftRadius: 22,
       borderTopRightRadius: 22,

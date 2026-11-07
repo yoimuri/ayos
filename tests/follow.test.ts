@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   RESUME_IDLE_MS,
   bearingFor,
+  fitPadding,
   busyUntil,
   checkResume,
   pauseAt,
@@ -72,3 +73,20 @@ test('the map turns with the road while moving, holds at a light, then goes back
   assert.equal(bearingFor({ course: null, compass: 250, lastMovingAt: null, now: 0, current: 0 }), 250);
   assert.equal(bearingFor({ course: 120, compass: 250, lastMovingAt: 0, now: 0, current: 0 }), 120);
 });
+
+test('framing never counts the hidden area twice: padding plus inset equals what is hidden, plus a margin', () => {
+  /* Clint's phone with the Nearest shop panel open: search card 130 on top, panel 407 below, inset 400. */
+  const p = fitPadding({ hiddenTop: 130, hiddenBottom: 407, insetTop: 130, insetBottom: 400 });
+  assert.equal(p.top, 56);
+  assert.equal(p.bottom, 7 + 32);
+  const screen = 740;
+  const room = screen - (130 + p.top) - (400 + p.bottom);
+  assert.ok(room >= 100, `${room} px left to fit the rider and the shop`);
+});
+
+test('an inset bigger than what is hidden does not ask for negative padding', () => {
+  const p = fitPadding({ hiddenTop: 0, hiddenBottom: 100, insetTop: 0, insetBottom: 280 });
+  assert.equal(p.top, 56);
+  assert.equal(p.bottom, 32);
+});
+
