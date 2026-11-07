@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Accelerometer, Magnetometer } from 'expo-sensors';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -8,6 +9,7 @@ import { createHeadingFilter, shortestDelta } from './headingFilter';
 import { createPositionFilter } from './positionFilter';
 import { courseIsFresh } from './course';
 import { createMotion } from './motion';
+import { LAST_POSITION_KEY, parseSaved, shouldSave, type SavedPosition } from './lastPosition';
 import { isGoodFix, SETTLE_TIMEOUT_MS } from './settle';
 import { ease, forwardHeading, type Vec3 } from './tiltHeading';
 
@@ -151,6 +153,21 @@ export type LocationGate = {
   recheck: () => Promise<void>;
 };
 
+/** A live reading: save it as the last known location when it is good enough and due (lastPosition.ts). */
+function rememberPosition(
+  saved: { current: SavedPosition | null },
+  lng: number,
+  lat: number,
+  at: number,
+  accuracyM: number | null,
+  mocked: boolean,
+) {
+  const next = { lng, lat, at };
+  if (!shouldSave(saved.current, next, accuracyM, mocked)) return;
+  saved.current = next;
+  AsyncStorage.setItem(LAST_POSITION_KEY, JSON.stringify(next)).catch(() => {});
+}
+
 /** How long to wait before each retry of a failed position watch. */
 const WATCH_RETRY_MS = [3000, 10_000];
 
@@ -177,6 +194,8 @@ function useLocationGateState(): LocationGate {
   const [precise, setPrecise] = useState<boolean | null>(null);
   /** The fix currently on screen, so a worse one can be refused. */
   const held = useRef<Fix | null>(null);
+  /* The last known location on this phone: the newest one saved, or read back when the app opened. */
+  const lastSaved = useRef<SavedPosition | null>(null);
   const counts = useRef({ accepted: 0, rejected: 0 });
   const [heading, setHeading] = useState<number | null>(null);
   const filter = useRef(createHeadingFilter());
@@ -227,6 +246,7 @@ function useLocationGateState(): LocationGate {
   };
 
   const readPosition = useCallback(async (live: boolean) => {
+    let phoneHadOne = false;
     /*
       The remembered fix first, always. It returns immediately, where a live fix can take
       several seconds outdoors and never arrive indoors. Showing the old position now and
@@ -248,6 +268,7 @@ function useLocationGateState(): LocationGate {
         maxAge: 30 * 60 * 1000,
         requiredAccuracy: 500,
       });
+      phoneHadOne = !!last;
       if (last && mounted.current) {
         setPosition([last.coords.longitude, last.coords.latitude]);
         setAccuracyM(last.coords.accuracy ?? null);
@@ -262,6 +283,20 @@ function useLocationGateState(): LocationGate {
       }
     } catch {
       /* No remembered fix is a normal state on a fresh phone, not a failure. */
+    }
+
+    /*
+      THE PHONE HAS NOTHING RECENT, or will not say with location off: our own last known location,
+      however old. Faded like any remembered spot, and only if nothing better is on screen. No fading
+      away with age: the directory should keep working offline, and the banner says it is not live.
+    */
+    if (!phoneHadOne) {
+      const saved = lastSaved.current ?? parseSaved(await AsyncStorage.getItem(LAST_POSITION_KEY).catch(() => null));
+      if (saved && mounted.current) {
+        lastSaved.current = saved;
+        setPosition((now) => now ?? [saved.lng, saved.lat]);
+        setStale(true);
+      }
     }
 
     if (!live) return;
@@ -378,6 +413,7 @@ function useLocationGateState(): LocationGate {
           if (fixed) {
             setPosition([fixed.lng, fixed.lat]);
             setFixAt(p.timestamp);
+            rememberPosition(lastSaved, fixed.lng, fixed.lat, p.timestamp, p.coords.accuracy ?? null, !!p.mocked);
           }
           /*
             The PHONE's figure, not the filter's. Averaging makes the filter's own number
@@ -583,6 +619,7 @@ function useLocationGateState(): LocationGate {
       });
       if (!fixed) return;
       setPosition([fixed.lng, fixed.lat]);
+      rememberPosition(lastSaved, fixed.lng, fixed.lat, p.timestamp, p.coords.accuracy ?? null, !!p.mocked);
       setAccuracyM(p.coords.accuracy ?? null);
       setStale(false);
       if (isGoodFix(p.coords.accuracy)) setSettled(true);

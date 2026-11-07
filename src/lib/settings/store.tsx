@@ -26,7 +26,7 @@ import { PALETTES, type PaletteName, type Theme, type ThemeName } from '@/lib/th
  * handful of small values, so a simple key-value store is the right size.
  */
 
-/** Coarse area, not coordinates: the rider's precise location is never stored. */
+/** Coarse area, not coordinates. The one precise spot kept is the last known location: lib/location/lastPosition.ts. */
 /**
  * Metro Manila's 17 cities. Each shop's city comes from its own address, written by
  * scripts/import_shops.py, not from guessing by map position.
@@ -287,8 +287,7 @@ export const AREA_LABELS: Record<Area, string> = {
  * not the city hall, because it is only used to place the map when the rider has no
  * location yet, and there it should open over shops.
  *
- * Not anybody's position: the rule about never storing a precise location is about the
- * RIDER.
+ * Not anybody's position: these describe the shops, not the rider.
  */
 export const AREA_CENTRES: Record<Area, [number, number]> = {
   caloocan: [121.0164, 14.7367],
