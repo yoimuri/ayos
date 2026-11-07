@@ -310,7 +310,7 @@ Eleventh over-the-air update to 1.3.0 (3 Nov 2026), not yet checked on a phone:
   stays while they are outside (tap it to see why again). The map itself stays held inside
   Metro Manila
 
-Published over the air on 5 and 7 Nov 2026 (latest update 01a1b4d4), not yet checked on a phone:
+Published over the air on 5 and 7 Nov 2026 (latest update 01a1b4db), not yet checked on a phone:
 
 - Your ride parts: four tabs (Bike, Rider, Helmet, Parts) with six outfits, five helmets in
   four colours, four exhausts, eight top boxes and three add-ons, on every vehicle. Each part
@@ -339,6 +339,8 @@ Published over the air on 5 and 7 Nov 2026 (latest update 01a1b4d4), not yet che
   ones first, ranked by real road distance from the same route server and refreshed as the rider
   moves, with an estimate marked "≈" when there is no signal. A shop with unknown hours only appears if it can be phoned. A Call
   911 button opens the dialler
+- The last good location is kept on the phone, one spot overwritten each time, and used faded
+  whenever there is no live reading, so the directory keeps working
 - Odometer, in Settings > Map and riding: Start ride and End ride add up kilometres while the
   app is open with the screen on, and the bike's reading can be typed by hand. Only the numbers
   are kept, on the phone, never a position or a route
