@@ -291,6 +291,19 @@ export function MapOnlyIcon({ on, size = 24, color }: { on: boolean; size?: numb
   );
 }
 
+/**
+ * An OPEN padlock: a paid Your ride item, unlocked in the demo. Small and quiet on purpose
+ * (Clint, 30 Oct: paid extras are never pushed in the rider's face).
+ */
+export function UnlockedIcon({ size = 12, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x={4.5} y={11} width={15} height={10} rx={2} />
+      <Path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" />
+    </Svg>
+  );
+}
+
 export function SquareIcon({ size = 24, color }: { size?: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">

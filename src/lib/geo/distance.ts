@@ -39,6 +39,16 @@ export function splitDistance(metres: number): { value: string; unit: 'km' } {
 }
 
 /**
+ * Degrees clockwise from north, from one [lng, lat] to another. Treats the ground as flat:
+ * across Metro Manila that is off by far less than anyone can see on an arrow.
+ */
+export function bearingTo(from: [number, number], to: [number, number]): number {
+  const east = (to[0] - from[0]) * Math.cos((from[1] * Math.PI) / 180);
+  const north = to[1] - from[1];
+  return ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+}
+
+/**
  * Shops for the rider's chosen area and radius, nearest first.
  *
  * `from` is where the radius is measured from: the rider, or the picked city's busiest

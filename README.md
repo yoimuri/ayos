@@ -310,10 +310,38 @@ Eleventh over-the-air update to 1.3.0 (3 Nov 2026), not yet checked on a phone:
   stays while they are outside (tap it to see why again). The map itself stays held inside
   Metro Manila
 
+Published over the air on 5 and 7 Nov 2026 (latest update 01a1b423), not yet checked on a phone:
+
+- Your ride parts: four tabs (Bike, Rider, Helmet, Parts) with six outfits, five helmets in
+  four colours, four exhausts, eight top boxes and three add-ons, on every vehicle. Each part
+  is its own layer of pictures, rendered with whatever stands in front of it cut out, and the
+  layers are stacked on the map and in Your ride; helmets are shared and placed on each
+  vehicle's head. Paid items show a small open padlock (everything is open in the demo)
+- The bike now has 8 views, one every 45 degrees, instead of 24: on the map it steps round
+  like a navigation arrow, and the Your ride turntable steps with a short fade
+- Build on Save: each part ships as two sheets of pictures, and saving a ride puts its parts
+  together on the phone into 9 finished pictures, so the map draws one layer for the rider
+  instead of one per part. The default ride ships ready-made. Plain JavaScript, no new native
+  library. Brings an update from 1,035 files to 266, under the 1,000 limit
+- Zoomed out, the map shows each city as a see-through colour, using city
+  outlines from OpenStreetMap. Tapping a city goes there and shows how many shops it has.
+  Zoomed in, groups of shops carry no numbers: a glossy ball in Standard, a hollow ring in Light
+- Tapping a shop draws a line with arrows along the roads from the rider to the shop, once per
+  tap, in motorcycle mode and avoiding expressways, tolls and ferries. Demo only: it uses a free
+  public route server (FOSSGIS Valhalla), needs internet, and sends the rider's position to that
+  server on each tap. It only knows motorcycle bans marked in OpenStreetMap, so riders still follow
+  road signs. With no line, a straight arrow points toward the shop
+- The OpenStreetMap credit shows on the map for 5 seconds when the app opens, and the info button
+  has the full credit and a link to report a map error
+- Nearest repair button: the nearest repair shop known to be open, the nearest with unknown
+  hours that can be phoned, and a Call 911 button that opens the dialler
+- Odometer, in Settings > Map and riding: Start ride and End ride add up kilometres while the
+  app is open with the screen on, and the bike's reading can be typed by hand. Only the numbers
+  are kept, on the phone, never a position or a route
+
 Not built yet:
 
-- Outfits, helmets and parts in Your ride. Every combination would need its own set of map
-  pictures; drawing each part as its own layer of pictures is the likely way, not decided
+- Live 3D in Your ride (smooth turning, parts as 3D models); needs a new APK
 
 - A backend and database, so the shop list can be updated without a new app release
 - Saving ratings to a server (today a rating stays on the phone that gave it), legal pages
@@ -324,6 +352,10 @@ Not built yet:
 - Self-hosted map tiles (it uses OpenFreeMap's public tiles today)
 
 ---
+
+## Contact
+
+dcharls801@gmail.com
 
 ## Design rules
 

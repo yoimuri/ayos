@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Image, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+
+import { TOP_TILE } from '@/features/ride/compose';
+import { MapTile } from '@/features/ride/MapTile';
+import type { StackLayer } from '@/features/ride/stack';
 
 import type { Theme } from '@/lib/theme/tokens';
 
@@ -19,12 +23,14 @@ const ROAD_H = 104;
  * Still for riders who turned on "Remove animations" in the phone's settings.
  */
 export function RoadPreview({
-  bike,
+  stack,
   size,
   theme,
   light = false,
 }: {
-  bike: ImageSourcePropType;
+  /** The ride's layers; their pictures from straight above are drawn here, stacked. */
+  stack: StackLayer[];
+  /** How big the 240 px overhead picture is drawn, in dp. */
   size: number;
   theme: Theme;
   /** Graphics: Light. The road stays still. */
@@ -72,11 +78,24 @@ export function RoadPreview({
           Centred in the right lane. The road is 80 px wide (two 40 px lanes), so the right
           lane's middle is 60 px in; the picture is square and mostly empty around the bike.
         */}
-        <Image
-          source={bike}
-          style={{ position: 'absolute', width: size, height: size, left: 60 - size / 2, top: (ROAD_H - size) / 2 }}
-          resizeMode="contain"
-        />
+        {stack.map((layer) => {
+          /* The shared helmet moves onto this vehicle's head, scaled from 240 px picture units. */
+          const [dx, dy] = layer.helmet ? layer.helmet.top : [0, 0];
+          const k = size / 240;
+          return (
+            <MapTile
+              key={layer.name}
+              sheet={layer.pics.map}
+              tile={TOP_TILE}
+              size={size}
+              style={{
+                position: 'absolute',
+                left: 60 - size / 2 + dx * k,
+                top: (ROAD_H - size) / 2 + dy * k,
+              }}
+            />
+          );
+        })}
       </View>
     </View>
   );

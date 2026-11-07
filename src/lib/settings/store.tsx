@@ -113,7 +113,7 @@ export type Settings = {
    * (Clint, 30 Oct: the lightest start, on every phone).
    */
   map3d: boolean;
-  /** The bike drawn on the map: vehicle, paint and size, chosen in Your ride. */
+  /** The rider drawn on the map, chosen in Your ride: vehicle, paint, size and every part. */
   ride: Ride;
   /**
    * GRAPHICS (Clint, 31 Oct / 1 Nov): Standard is the app as designed. Light is THE
@@ -125,8 +125,7 @@ export type Settings = {
    *     pictures are loaded at all;
    *   - no shop-type chips, no map-only button, no Your ride (index, RealMap, settings);
    *   - cards and buttons are flat, without shadows.
-   * Switching either way asks to restart (settings.tsx). Your ride keeps its own Light
-   * handling (small pictures, no spin, still road) in case it is reached anyway.
+   * Switching either way asks to restart (settings.tsx).
    */
   graphics: 'standard' | 'light';
 };

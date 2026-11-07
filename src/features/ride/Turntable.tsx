@@ -1,73 +1,89 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, PanResponder, StyleSheet, View } from 'react-native';
 
+import { ANGLES } from '@/features/ride/catalog';
+import type { StackLayer } from '@/features/ride/stack';
 import { useSettings } from '@/lib/settings/store';
 
+/** How far a finger drags for one step round the bike. */
+const DRAG_PER_STEP = 40;
+/** The bike steps round by itself this often, until a finger takes over. */
+const AUTO_STEP_MS = 1100;
+const FADE_MS = 220;
+/** How each layer's sheet of 8 views is laid out (docs/design/ride3d/app_export.py). */
+const SHEET_COLS = 4;
+const SHEET_ROWS = 2;
+
 /**
- * The bike on a turntable: 24 pictures, one every 15 degrees, from the same set the map uses.
+ * The ride on a turntable: 8 views, one every 45 degrees, each a stack of layers (bike,
+ * outfit, exhaust, helmet, top box, add-ons) drawn on top of each other (features/ride/stack.ts).
  *
- * It turns slowly by itself so it is obvious that it turns. A finger dragging sideways takes
- * over (about 8 px per step, round and round); a moment after the finger lifts it carries on
- * by itself.
+ * IT STEPS, it does not spin (Clint, 1 Nov: 8 angles keep every part under the update's
+ * picture limit). It steps round by itself so it is obvious that it turns; a finger dragging
+ * sideways takes over (one step per 40 px), and a moment after the finger lifts it carries on.
+ * Each step fades over the last in a fifth of a second, so it reads as turning, not jumping.
  *
- * All 24 pictures are mounted at once and only the current one is visible. Swapping one
- * Image's source instead flickers on Android while the next picture decodes; 24 pictures
- * held in memory (about 20 MB at this size) cost less than a flicker, and only while this
- * screen is open.
- *
- * ITS OWN SHARP PICTURES (turntable.generated.ts), not the map's: shown this big, the
- * map's 240 px, 256-colour pictures looked pixelated (Clint, 31 Oct). These are rendered at
- * three times the size, in full colour, cropped to the bike and centred on it, so every
- * angle is the same `aspect` box. They carry no shadow (storing a soft one cost too much,
- * see app_export.py), so a soft floor is drawn here where the bike stands.
+ * Only the view on show and the one fading out are mounted. Both cut their tiles from the
+ * same sheets, so the phone holds one sheet per layer in memory, whatever the ride.
  *
  * PLACED BY NUMBERS, NOT BY `contain`: left to `resizeMode="contain"` inside a wide box,
- * Android drew the picture against the box's left edge (Clint's phone, 1.3.0).
+ * Android drew the picture against the box's left edge (Clint's phone, 1.3.0). Every layer
+ * of a vehicle shares one crop box (`aspect`), so they stack exactly; the shared helmet is a
+ * small crop placed on the head (`helmet.turn`). The pictures carry no shadow, so a soft
+ * floor is drawn here where the bike stands.
  */
 export function Turntable({
-  frames,
+  stack,
   aspect,
   ground,
   floor,
   height,
-  light = false,
 }: {
-  frames: ImageSourcePropType[];
+  stack: StackLayer[];
   aspect: number;
   /** Where the bike stands, as a part of the picture's height (from the top). */
   ground: number;
   /** How tall its floor is, as a part of the picture's height. */
   floor: number;
   height: number;
-  /**
-   * Graphics: Light. The turntable turns only under a finger, and keeps just the pictures
-   * next to the one on show (about 4 MB instead of 20).
-   */
-  light?: boolean;
 }) {
   const { theme, t } = useSettings();
   const [index, setIndex] = useState(0);
+  const [prev, setPrev] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
-  /* The frame on show, for timers and gestures (they outlive a render, so they read a ref). */
+  const [fade] = useState(() => new Animated.Value(1));
+  const [fadeOut] = useState(() => fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }));
+  const [solid] = useState(() => new Animated.Value(1));
+  /* The view on show, for timers and gestures (they outlive a render, so they read a ref). */
   const current = useRef(0);
   const auto = useRef(true);
   const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef(0);
-  const count = frames.length;
+
+  const show = useCallback(
+    (k: number) => {
+      const next = ((k % ANGLES) + ANGLES) % ANGLES;
+      if (next === current.current) return;
+      setPrev(current.current);
+      current.current = next;
+      setIndex(next);
+      fade.setValue(0);
+      Animated.timing(fade, { toValue: 1, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setPrev(null);
+      });
+    },
+    [fade],
+  );
 
   useEffect(() => {
-    const show = (k: number) => {
-      current.current = ((k % count) + count) % count;
-      setIndex(current.current);
-    };
     const timer = setInterval(() => {
-      if (auto.current && !light) show(current.current + 1);
-    }, 160);
+      if (auto.current) show(current.current + 1);
+    }, AUTO_STEP_MS);
     return () => {
       clearInterval(timer);
       if (resume.current) clearTimeout(resume.current);
     };
-  }, [count, light]);
+  }, [show]);
 
   const pan = useMemo(
     () =>
@@ -80,30 +96,56 @@ export function Turntable({
           if (resume.current) clearTimeout(resume.current);
           start.current = current.current;
         },
-        onPanResponderMove: (_, g) => {
-          current.current = (((start.current - Math.round(g.dx / 8)) % count) + count) % count;
-          setIndex(current.current);
-        },
+        onPanResponderMove: (_, g) => show(start.current - Math.round(g.dx / DRAG_PER_STEP)),
         onPanResponderRelease: () => {
           resume.current = setTimeout(() => {
             auto.current = true;
-          }, 1200);
+          }, 1500);
         },
         onPanResponderTerminate: () => {
           resume.current = setTimeout(() => {
             auto.current = true;
-          }, 1200);
+          }, 1500);
         },
       }),
-    [count],
+    [show],
   );
 
   /* The picture fills most of the box without touching its edges. */
   const picH = width > 0 ? Math.min(height * 0.94, (width * 0.9) / aspect) : 0;
   const picW = picH * aspect;
   const picTop = (height - picH) / 2;
+  const picLeft = (width - picW) / 2;
   const floorW = picW * 0.8;
   const floorH = picH * floor * 0.8;
+
+  /*
+    One view of the ride: every layer's tile for angle `i`, stacked. Each layer's 8 views are
+    ONE sheet, 4 across and 2 down (an update may carry at most 1000 files: app_export.py).
+    The box is one tile big and clips; the whole sheet sits behind it, moved so tile `i`
+    lands in the box.
+  */
+  const view = (i: number, opacity: Animated.AnimatedInterpolation<number> | Animated.Value) => (
+    <Animated.View key={`view-${i}`} style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="none">
+      {stack.map((layer) => {
+        const h = layer.helmet?.turn;
+        const box = h
+          ? { left: picLeft + h.at[i][0] * picW, top: picTop + h.at[i][1] * picH, width: h.w * picW, height: h.h * picH }
+          : { left: picLeft, top: picTop, width: picW, height: picH };
+        const sheet = {
+          left: -(i % SHEET_COLS) * box.width,
+          top: -Math.floor(i / SHEET_COLS) * box.height,
+          width: box.width * SHEET_COLS,
+          height: box.height * SHEET_ROWS,
+        };
+        return (
+          <View key={layer.name} style={[s.tile, box]}>
+            <Image source={layer.pics.turn} style={[s.frame, sheet]} fadeDuration={0} />
+          </View>
+        );
+      })}
+    </Animated.View>
+  );
 
   return (
     <View
@@ -114,38 +156,14 @@ export function Turntable({
       {...pan.panHandlers}
     >
       {picH > 0 && (
-        <View
-          style={[
-            s.floor,
-            {
-              width: floorW,
-              height: floorH,
-              left: (width - floorW) / 2,
-              top: picTop + picH * ground - floorH / 2,
-            },
-          ]}
-        />
+        <>
+          <View
+            style={[s.floor, { width: floorW, height: floorH, left: (width - floorW) / 2, top: picTop + picH * ground - floorH / 2 }]}
+          />
+          {prev !== null && view(prev, fadeOut)}
+          {view(index, prev !== null ? fade : solid)}
+        </>
       )}
-      {picH > 0 &&
-        frames.map((src, i) =>
-          light && Math.min((i - index + count) % count, (index - i + count) % count) > 2 ? null : (
-            <Image
-              key={i}
-              source={src}
-              style={[
-                s.frame,
-                {
-                  width: picW,
-                  height: picH,
-                  top: picTop,
-                  left: (width - picW) / 2,
-                  opacity: i === index ? 1 : 0,
-                },
-              ]}
-              fadeDuration={0}
-            />
-          ),
-        )}
     </View>
   );
 }
@@ -163,5 +181,9 @@ const s = StyleSheet.create({
   },
   frame: {
     position: 'absolute',
+  },
+  tile: {
+    position: 'absolute',
+    overflow: 'hidden',
   },
 });

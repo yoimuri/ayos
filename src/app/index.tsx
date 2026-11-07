@@ -35,6 +35,7 @@ import {
   OutsideBanner,
 } from '@/components/LocationNotice';
 import { MapBoundary } from '@/components/MapBoundary';
+import { NearestRepairPanel } from '@/components/NearestRepair';
 import { RealMap } from '@/components/RealMap';
 import { ShopAheadBanner } from '@/components/ShopAhead';
 import { TourProvider, useTourController, type TourStep } from '@/components/Tour';
@@ -47,6 +48,9 @@ import { useExportReminder } from '@/lib/fieldwork/store';
 import { overall } from '@/lib/personal/model';
 import { usePersonal } from '@/lib/personal/store';
 import { NO_ALERTS, nextAlert, type AheadOf, type AlertMemory } from '@/lib/nearby/ahead';
+import { nearestRepair } from '@/lib/nearby/nearestRepair';
+import { formatKm } from '@/lib/odometer/model';
+import { useOdometer } from '@/lib/odometer/store';
 import type { Shop, ShopTag } from '@/lib/data/types';
 import type { Strings } from '@/lib/i18n/strings';
 import { RADIUS_OPTIONS, shopsForArea, splitDistance } from '@/lib/geo/distance';
@@ -198,6 +202,12 @@ export default function HomeScreen() {
     [markViewed],
   );
   const closeShop = () => setFocus(null);
+  /* Going to a city: from the picker, or a tap on its colour on the map. */
+  const goToCity = (area: Area) => {
+    setNearMe(false);
+    update({ area });
+    setFrameNonce((n) => n + 1);
+  };
 
   /*
     The phone's back button closes an open shop before it does anything else. Riders who
@@ -214,6 +224,23 @@ export default function HomeScreen() {
   }, [focus]);
   /* Held so the wordmark can send a long list back to the top. */
   const listRef = useRef<FlatList<Shop>>(null);
+
+  /* NEAREST REPAIR: the panel over the shop list, and how tall it is, so the map lifts clear of it. */
+  const [repairOpen, setRepairOpen] = useState(false);
+  const [repairH, setRepairH] = useState(0);
+  /* Back closes this panel first. Registered after the shop's handler, so it is asked first. */
+  useEffect(() => {
+    if (!repairOpen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setRepairOpen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [repairOpen]);
+
+  /* The city just tapped on the zoomed-out map: its name and count, in a small card. */
+  const [cityCard, setCityCard] = useState<Area | null>(null);
+  const odometer = useOdometer();
 
   /*
     Whichever dataset the rider has selected, with distances measured from where they
@@ -600,7 +627,7 @@ export default function HomeScreen() {
             focus={focus}
             /* A pin opens the shop in the panel, exactly as its list row does. */
             onPressPin={openFromTap}
-            centerBias={sheetAt === 'map' ? 0.47 : 0.3}
+            centerBias={repairOpen ? 0 : sheetAt === 'map' ? 0.47 : 0.3}
             online={online !== false}
             rider={gate.position}
             riderLive={gate.status === 'ready' && !gate.stale}
@@ -612,6 +639,7 @@ export default function HomeScreen() {
                 mode, measured from the rider, with their city named in the band.
               */
               setNearMe(true);
+              setCityCard(null);
             }}
             radiusM={settings.radiusM}
             showRing={settings.showRadiusRing}
@@ -631,15 +659,24 @@ export default function HomeScreen() {
                 that recentring exists to do.
               */
               frameNonce > 0 && activeArea && areaShops.length > 0
-                ? { bounds: boundsOf(areaShops), nonce: frameNonce }
+                ? { bounds: boundsOf(areaShops), centre: filterOrigin, nonce: frameNonce }
                 : null
             }
-            /* Tapping empty map is "never mind": it closes the open shop. */
-            onClearFocus={closeShop}
+            onPressCity={(area) => {
+              closeShop();
+              goToCity(area);
+              setCityCard(area);
+            }}
+            selectedCity={cityCard}
+            /* Tapping empty map is "never mind": it closes the open shop and the city card. */
+            onClearFocus={() => {
+              closeShop();
+              setCityCard(null);
+            }}
             heading={gate.heading}
             course={gate.course}
             /* Everything below the sheet's top edge is hidden, so controls sit above it. */
-            obscuredBottom={bare ? 0 : stageH - sheetTop(sheetAt, stageH, headerH)}
+            obscuredBottom={bare ? 0 : repairOpen ? repairH : stageH - sheetTop(sheetAt, stageH, headerH)}
             obscuredTop={bare ? 0 : headerH}
             mapHidden={sheetAt === 'list'}
             bare={bare}
@@ -746,6 +783,19 @@ export default function HomeScreen() {
               </Text>
               <ExpandIcon open={false} size={18} color={theme.ink3} />
             </Pressable>
+            {/* A ride is being counted: how far so far, and the way back to End ride. */}
+            {odometer.data.ride && (
+              <Pressable
+                onPress={() => router.push('/odometer')}
+                style={[s.cityPill, s.ridePill, light && s.flat]}
+                accessibilityRole="button"
+                accessibilityLabel={t.odometer}
+              >
+                <Text style={s.cityPillText}>
+                  {formatKm(odometer.data.ride.km)} {t.km.toLowerCase()}
+                </Text>
+              </Pressable>
+            )}
             <View style={s.grow} pointerEvents="none" />
             {/*
               HELP, where it can always be found. Replays the tutorial. A question mark
@@ -829,6 +879,23 @@ export default function HomeScreen() {
           />
         )}
 
+        {/* The city just tapped, and how many shops it has: where the numbers went. */}
+        {cityCard && !bare && !repairOpen && stageH > 0 && sheetAt !== 'list' && (
+          <View
+            style={[s.cityCard, light && s.flat, { bottom: stageH - sheetTop(sheetAt, stageH, headerH) + (updateReady && !updateLater ? 88 : 44) }]}
+          >
+            <View style={s.grow}>
+              <Text style={s.cityCardName} numberOfLines={1}>
+                {AREA_LABELS[cityCard]}
+              </Text>
+              <Text style={s.cityCardCount}>{t.shopCount(cityCounts[cityCard] ?? 0)}</Text>
+            </View>
+            <Pressable onPress={() => setCityCard(null)} style={s.cardBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.close}>
+              <Text style={s.clearGlyph}>✕</Text>
+            </Pressable>
+          </View>
+        )}
+
         {aheadBanner && (
           <ShopAheadBanner
             items={aheadBanner.items}
@@ -864,6 +931,24 @@ export default function HomeScreen() {
                 />
               ) : (
               <>
+                {/*
+                  NEAREST REPAIR, in the panel rather than floating over the map: the map's own
+                  buttons fill the strip of map above the panel, and a full-width bar there would
+                  sit on them. In the panel it is always in reach, at the very bottom of the
+                  screen when the map has the screen, and gone with the panel in Map only.
+                */}
+                <Pressable
+                  onPress={() => {
+                    setRepairOpen(true);
+                    const { open, unknown } = nearestRepair(allShops);
+                    const first = gate.position ? (open ?? unknown) : null;
+                    if (first) openShop(first);
+                  }}
+                  style={({ pressed }) => [s.repairBtn, pressed && s.pressed]}
+                  accessibilityRole="button"
+                >
+                  <Text style={s.repairBtnText}>{t.nearestRepair}</Text>
+                </Pressable>
                 {/* How far to look. Filters the map and the list together. */}
                 <View ref={radiusRef} collapsable={false}>
                 <ScrollView
@@ -957,6 +1042,17 @@ export default function HomeScreen() {
             )}
           </ShopSheet>
           </View>
+        )}
+
+        {repairOpen && !bare && (
+          <NearestRepairPanel
+            shops={allShops}
+            located={gate.position !== null}
+            selectedId={focus?.shop.id}
+            onSelect={openShop}
+            onClose={() => setRepairOpen(false)}
+            onHeight={setRepairH}
+          />
         )}
       </View>
 
@@ -1054,9 +1150,8 @@ export default function HomeScreen() {
                         limit, so there was no circle to draw, and the search ring
                         vanished every time a city was picked.
                       */
-                      setNearMe(false);
-                      update({ area });
-                      setFrameNonce((n) => n + 1);
+                      goToCity(area);
+                      setCityCard(null);
                       setCityOpen(false);
                     }}
                   />
@@ -1362,6 +1457,38 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       shadowOffset: { width: 0, height: 3 },
     },
     cityPillText: { fontSize: 13, fontWeight: '700', color: theme.ink, flexShrink: 1 },
+    ridePill: { marginLeft: 8 },
+    cityCard: {
+      position: 'absolute',
+      left: 12,
+      right: 72,
+      minHeight: 60,
+      borderRadius: 16,
+      paddingLeft: 16,
+      paddingRight: 8,
+      paddingVertical: 8,
+      backgroundColor: theme.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      elevation: 6,
+      shadowColor: '#28180C',
+      shadowOpacity: 0.16,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    cityCardName: { fontSize: 16, fontWeight: '700', color: theme.ink },
+    cityCardCount: { fontSize: 14, color: theme.ink2, marginTop: 1 },
+    repairBtn: {
+      height: 48,
+      marginHorizontal: 12,
+      marginBottom: 2,
+      borderRadius: 14,
+      backgroundColor: theme.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    repairBtnText: { color: theme.onFilled, fontSize: 16, fontWeight: '800' },
 
 
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

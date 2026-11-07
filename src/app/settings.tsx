@@ -127,6 +127,7 @@ export default function SettingsScreen() {
           {/* The only way into Your ride, by rule: an optional extra, never pushed anywhere else. */}
           {/* Not in Light: the rider is a plain dot there, so there is no bike to choose. */}
           {settings.graphics !== 'light' && <Link label={t.yourRide} onPress={() => router.push('/ride')} />}
+          <Link label={t.odometer} onPress={() => router.push('/odometer')} />
         </Section>
 
         <Section title={t.sectionApp}>

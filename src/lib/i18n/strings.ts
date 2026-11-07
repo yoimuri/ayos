@@ -237,12 +237,37 @@ export type Strings = {
   // Settings sections
   sectionMap: string;
   /** Your ride: the bike drawn on the map. */
+  /* Nearest repair, city areas and the ride counter (Charls, 5 Nov). */
+  nearestRepair: string;
+  call911: string;
+  callFirst: string;
+  noRepairFound: string;
+  repairNeedsLocation: string;
+  shopCount: (n: number) => string;
+  odometer: string;
+  odometerReading: string;
+  startRide: string;
+  endRide: string;
+  thisRide: string;
+  lastRide: string;
+  countsWhileOpen: string;
   yourRide: string;
   rideVehicle: string;
   rideSize: string;
   ridePaint: string;
   rideSave: string;
   rideSaved: string;
+  rideTabBike: string;
+  rideTabRider: string;
+  rideTabHelmet: string;
+  rideTabParts: string;
+  rideOutfit: string;
+  rideHelmetStyle: string;
+  rideHelmetColour: string;
+  ridePipe: string;
+  rideTopbox: string;
+  rideAddons: string;
+  rideUnlocked: string;
   rideSoon: string;
   /** Read aloud by screen readers on the turning bike. */
   rideTurnHint: string;
@@ -454,7 +479,7 @@ const en: Strings = {
   locBlockedBody: 'Turn it on for Ayoos in app settings.',
   locBlockedAction: 'Open app settings',
   locAskTitle: 'Turn on location?',
-  locAskBody: 'Only used to measure distance to shops. It never leaves your phone.',
+  locAskBody: 'Used to measure distance to shops. When you tap a shop, your position is sent to a map service to draw the road line.',
   locAskAction: 'Turn on location',
   mapCached: 'The map is showing the last area you loaded.',
   mapCachedOffline: 'You are offline, so the map is showing the last area you loaded.',
@@ -490,12 +515,36 @@ const en: Strings = {
   clearRating: 'Clear rating',
 
   sectionMap: 'Map and riding',
+  nearestRepair: 'Nearest repair',
+  call911: 'Call 911',
+  callFirst: 'Call first',
+  noRepairFound: 'No repair shop found',
+  repairNeedsLocation: 'Turn on location to find the nearest shop',
+  shopCount: (n) => (n === 1 ? '1 shop' : `${n.toLocaleString('en-US')} shops`),
+  odometer: 'Odometer',
+  odometerReading: 'Odometer reading',
+  startRide: 'Start ride',
+  endRide: 'End ride',
+  thisRide: 'This ride',
+  lastRide: 'Last ride',
+  countsWhileOpen: 'Counts while Ayoos is open',
   yourRide: 'Your ride',
   rideVehicle: 'Vehicle',
   rideSize: 'Size on the map',
   ridePaint: 'Paint',
   rideSave: 'Save',
   rideSaved: 'Saved',
+  rideTabBike: 'Bike',
+  rideTabRider: 'Rider',
+  rideTabHelmet: 'Helmet',
+  rideTabParts: 'Parts',
+  rideOutfit: 'Outfit',
+  rideHelmetStyle: 'Helmet',
+  rideHelmetColour: 'Helmet colour',
+  ridePipe: 'Exhaust',
+  rideTopbox: 'Top box',
+  rideAddons: 'Add-ons, pick any',
+  rideUnlocked: 'unlocked in the demo',
   rideSoon: 'Soon',
   rideTurnHint: 'Drag sideways to turn the bike',
   vehicleScooter: 'Scooter',
@@ -706,7 +755,7 @@ const tl: Strings = {
   locBlockedBody: 'I-on ito para sa Ayoos sa app settings.',
   locBlockedAction: 'Buksan ang app settings',
   locAskTitle: 'I-on ang location?',
-  locAskBody: 'Para lang sukatin ang layo ng mga shop. Hindi ito lumalabas sa phone mo.',
+  locAskBody: 'Para sukatin ang layo ng mga shop. Kapag nag-tap ka ng shop, ipinapadala ang posisyon mo sa map service para iguhit ang daan.',
   locAskAction: 'I-on ang location',
   mapCached: 'Ang nasa mapa ay yung huling area na na-load mo.',
   mapCachedOffline: 'Offline ka, kaya ang nasa mapa ay yung huling area na na-load mo.',
@@ -742,12 +791,36 @@ const tl: Strings = {
   clearRating: 'Burahin ang rating',
 
   sectionMap: 'Mapa at biyahe',
+  nearestRepair: 'Pinakamalapit na repair',
+  call911: 'Tumawag sa 911',
+  callFirst: 'Tumawag muna',
+  noRepairFound: 'Walang nakitang repair shop',
+  repairNeedsLocation: 'I-on ang location para makita ang pinakamalapit',
+  shopCount: (n) => (n === 1 ? '1 shop' : `${n.toLocaleString('en-US')} na shop`),
+  odometer: 'Odometer',
+  odometerReading: 'Reading ng odometer',
+  startRide: 'Simulan ang biyahe',
+  endRide: 'Tapusin ang biyahe',
+  thisRide: 'Biyaheng ito',
+  lastRide: 'Huling biyahe',
+  countsWhileOpen: 'Bumibilang habang bukas ang Ayoos',
   yourRide: 'Ang motor mo',
   rideVehicle: 'Sasakyan',
   rideSize: 'Laki sa mapa',
   ridePaint: 'Kulay',
   rideSave: 'I-save',
   rideSaved: 'Naka-save',
+  rideTabBike: 'Motor',
+  rideTabRider: 'Rider',
+  rideTabHelmet: 'Helmet',
+  rideTabParts: 'Piyesa',
+  rideOutfit: 'Suot',
+  rideHelmetStyle: 'Helmet',
+  rideHelmetColour: 'Kulay ng helmet',
+  ridePipe: 'Tambutso',
+  rideTopbox: 'Top box',
+  rideAddons: 'Add-ons, kahit ilan',
+  rideUnlocked: 'bukas sa demo',
   rideSoon: 'Malapit na',
   rideTurnHint: 'I-drag pakaliwa o pakanan para iikot ang motor',
   vehicleScooter: 'Scooter',

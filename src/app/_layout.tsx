@@ -9,6 +9,7 @@ import { useFonts } from 'expo-font';
 import { ConnectionBanner } from '@/components/ConnectionBanner';
 import { FieldworkProvider } from '@/lib/fieldwork/store';
 import { LocationProvider } from '@/lib/location/useLocationGate';
+import { OdometerProvider } from '@/lib/odometer/store';
 import { PersonalProvider } from '@/lib/personal/store';
 import { SettingsProvider, useSettings } from '@/lib/settings/store';
 import { surveyComplete } from '@/lib/survey/questions';
@@ -115,7 +116,10 @@ export default function RootLayout() {
         {/* My shops and field survey data, each on this phone, each under its own key. */}
         <PersonalProvider>
           <FieldworkProvider>
-            <RootNavigator />
+            {/* The ride counter reads the one GPS watch, so it sits inside LocationProvider. */}
+            <OdometerProvider>
+              <RootNavigator />
+            </OdometerProvider>
           </FieldworkProvider>
         </PersonalProvider>
       </LocationProvider>

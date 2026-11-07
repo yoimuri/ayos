@@ -25,14 +25,16 @@ import {
 
 import { CompassIcon, CrosshairIcon, CubeIcon, InfoIcon, MapOnlyIcon, NeedleIcon, SquareIcon } from '@/components/icons';
 import { frameFor, sizeScale } from '@/features/ride/catalog';
-import { SPRITES, type RideLook } from '@/features/ride/sprites.generated';
+import { useRidePictures } from '@/features/ride/pictures';
 import { useTour, useTourTarget } from '@/components/Tour';
 
 import type { Shop } from '@/lib/data/types';
+import { CITY_AREAS } from '@/lib/geo/cityAreas.generated';
 import { METRO_MANILA } from '@/lib/geo/coverage';
-import { DETOUR_FACTOR } from '@/lib/geo/distance';
+import { bearingTo, DETOUR_FACTOR } from '@/lib/geo/distance';
 import { bearingFor, busyUntil, checkResume, pauseAt, shouldFollow, type Pause } from '@/lib/map/follow';
-import { AREA_CENTRES, useSettings } from '@/lib/settings/store';
+import { fetchRoadLine } from '@/lib/map/roadLine';
+import { AREA_CENTRES, useSettings, type Area } from '@/lib/settings/store';
 
 /**
  * THE MAP. Vector tiles, actual geography, panning and zooming.
@@ -87,6 +89,29 @@ const TILT_RIDING = 55;
 /** Zoomed out past this, the map flattens itself even in 3D: a tilted city is unreadable. */
 const FLAT_BELOW_ZOOM = 12.5;
 
+/*
+  ONE SWITCH FOR THE WHOLE MAP, at FLAT_BELOW_ZOOM (Charls, 5 Nov). Further out: a flat map of
+  coloured cities, tap one to go in. Closer: groups and pins, tilted if 3D is on. The two never
+  share the screen, so a coloured area can never sit under pins that are hard to read on it.
+*/
+/** The city colours fade out over this last stretch before the switch. */
+const CITY_FADE_FROM = FLAT_BELOW_ZOOM - 0.5;
+/** Tapping a city lands here: just past the switch, so its shops show at once. */
+const CITY_ZOOM = 13;
+/**
+ * A box wider than this, in degrees (about 3 km), only fits on a phone below the switch, where
+ * no shops are drawn. Going to such a place flies to its busiest spot at CITY_ZOOM instead.
+ */
+const FITS_AT_SHOP_ZOOM = 0.03;
+/** Tones per city, neighbours differ (scripts/build_city_areas.py). See-through: the map stays readable. */
+const CITY_TONES = ['#D9B779', '#E3A77F', '#B79BC2', '#9DBBA3', '#9FB6CE'];
+/** The style's first layer above the land and water, in both styles: city colours go just under it. */
+const FIRST_ABOVE_LAND = 'waterway';
+const WATER_COLOUR = { light: 'rgb(194, 200, 202)', dark: 'rgb(27, 27, 29)' } as const;
+
+/** No arrow closer than this: the rider is already there, and it would only spin. */
+const ARROW_MIN_M = 30;
+
 /** Metres between two [lng, lat] points; plenty accurate across a few hundred metres. */
 function metresBetween(a: [number, number], b: [number, number]): number {
   const k = 111_320;
@@ -118,17 +143,16 @@ function pinKind(shop: Shop): { cat: string; st: string } {
 /**
  * OpenStreetMap's licence requires visible credit, and this style ships no `attribution`
  * field in its sources, so MapLibre's own attribution control has nothing to display.
- * Drawing it here is a licence term, not decoration.
+ * Drawing it here is a licence term, not decoration. The wording and the report-an-error link
+ * are what the road line's server asks for (lib/map/roadLine.ts).
  */
-const ATTRIBUTION = '© OpenStreetMap contributors · OpenFreeMap';
+const ATTRIBUTION = 'Data © OpenStreetMap contributors (ODbL), CC-BY-SA · Map: OpenFreeMap · Road line: Valhalla, FOSSGIS';
 const OSM_COPYRIGHT = 'https://www.openstreetmap.org/copyright';
-
-/**
- * The font for cluster counts MUST be one the tile style actually serves, because the
- * glyphs are fetched from the style's own endpoint. `positron` ships Noto Sans in
- * Regular, Italic and Bold; anything else renders as nothing at all.
- */
-const LABEL_FONT = ['Noto Sans Bold'];
+const OSM_FIX = 'https://www.openstreetmap.org/fixthemap';
+/** Shown on the map when the app opens: the guidelines say nobody should have to tap to see it. */
+const CREDIT_LINE = '© OpenStreetMap contributors';
+/** They allow it to fade after this long, leaving the info button. */
+const CREDIT_MS = 5000;
 
 /**
  * Beyond this zoom, shops stop being grouped and each one is drawn separately.
@@ -246,34 +270,19 @@ const MAP_IMAGES = {
   'pin-accessories-unknown-v': { source: require('../../assets/images/map/pin-accessories-unknown-v.png') },
   sphere: { source: require('../../assets/images/map/sphere.png') },
   'pin-ring': { source: require('../../assets/images/map/pin-ring.png') },
+  'direction-arrow': { source: require('../../assets/images/map/direction-arrow.png') },
 };
 
 /**
- * GRAPHICS: LIGHT, THE CLASSIC LOOK (Clint, 1 Nov): the one picture Light still needs.
+ * GRAPHICS: LIGHT, THE CLASSIC LOOK (Clint, 1 Nov): the two pictures Light still needs.
  * Shops, groups of shops, the selected shop and the rider are drawn as plain circles by
- * the map itself, so none of the 24 pin pictures or the rider's 25 bike pictures are
+ * the map itself, so none of the 24 pin pictures or the rider's 9 bike pictures are
  * loaded at all.
  */
 const LIGHT_IMAGES = {
   'headlight-beam': { source: require('../../assets/images/map/headlight-beam.png') },
+  'direction-arrow': { source: require('../../assets/images/map/direction-arrow.png') },
 };
-
-/**
- * THE RIDER'S BIKE: the look chosen in Your ride, as map images. 24 pictures for 3D
- * ('rider-<look>-a0' ... '-a23', one every 15 degrees) and one from straight above for 2D.
- *
- * THE NAME CARRIES THE LOOK ('scooter-gold'), so a new look is a new name. The map keeps
- * the first picture it was given under a name and skips any later one with the same name
- * (MLRNImages.kt: `if (hasImage(imageName, mapInstance)) continue`). With fixed names, Save
- * in Your ride changed nothing on the map (Clint's phone, 1.3.0).
- */
-function riderImages(look: RideLook, key: string) {
-  const out: Record<string, { source: number }> = { [`rider-${key}-top`]: { source: look.top } };
-  look.angles.forEach((source, i) => {
-    out[`rider-${key}-a${i}`] = { source };
-  });
-  return out;
-}
 
 /** Stable hitboxes, for the same reason the images are stable. */
 /**
@@ -408,8 +417,14 @@ export function RealMap({
   onToggleBare,
   visited,
   recent,
+  onPressCity,
+  selectedCity = null,
 }: {
   shops: Shop[];
+  /** A coloured city was tapped, on the zoomed-out map. */
+  onPressCity?: (area: Area) => void;
+  /** The city just tapped: its outline stays drawn after zooming in. */
+  selectedCity?: Area | null;
   /** Ids of shops this rider marked Visited; their pins are drawn green. */
   visited?: string[];
   /** Ids of shops this rider opened lately; their names carry "Recently viewed". */
@@ -426,7 +441,8 @@ export function RealMap({
   showRing?: boolean;
   onClearFocus?: () => void;
   ringCentre?: [number, number] | null;
-  frame?: { bounds: [number, number, number, number]; nonce: number } | null;
+  /** `centre`: where to go when the whole box only fits below the zoom where shops show. */
+  frame?: { bounds: [number, number, number, number]; centre: [number, number] | null; nonce: number } | null;
   recentre?: number;
   heading?: number | null;
   /** Direction of travel while moving, else null (see useLocationGate). Turns the map. */
@@ -438,14 +454,17 @@ export function RealMap({
   onToggleBare?: () => void;
 }) {
   const { theme, mapTheme, settings, update, t } = useSettings();
-  /*
-    The pin images plus the chosen bike's. A new object only when the bike changes (on Save
-    in Your ride), never per render: see the note on `Images` below.
-  */
-  const riderLook = SPRITES[settings.ride.vehicle][settings.ride.paint];
-  const lookKey = `${settings.ride.vehicle}-${settings.ride.paint}`;
-  const riderImgs = useMemo(() => riderImages(riderLook, lookKey), [riderLook, lookKey]);
   const light = settings.graphics === 'light';
+  /*
+    THE RIDER'S PICTURES: 9 finished ones made when the ride was saved (features/ride/pictures.ts).
+    A new object only when a new ride is ready, never per render: see the note on `Images` below.
+
+    THE NAME CARRIES THE RIDE, so a new ride is a new name. The map keeps the first picture it
+    was given under a name and skips any later one with the same name (MLRNImages.kt: `if
+    (hasImage(imageName, mapInstance)) continue`). With fixed names, Save in Your ride changed
+    nothing on the map (Clint's phone, 1.3.0).
+  */
+  const ridePics = useRidePictures(settings.ride, !light);
   const dark = settings.theme === 'dark';
   /** The map's own turn, rounded, so the 3D bike knows which picture to show. */
   const [mapBearing, setMapBearing] = useState(0);
@@ -509,6 +528,14 @@ export function RealMap({
   const fly = (durationMs: number) => {
     flyingUntil.current = busyUntil(Date.now(), durationMs);
   };
+
+  /* The credit line on the map: 5 seconds from when the map has drawn, then the info button. */
+  const [creditDone, setCreditDone] = useState(false);
+  useEffect(() => {
+    if (!everLoaded) return;
+    const timer = setTimeout(() => setCreditDone(true), CREDIT_MS);
+    return () => clearTimeout(timer);
+  }, [everLoaded]);
 
   /*
     Where the map opens BEFORE the first fix arrives, and the value is frozen after the
@@ -685,6 +712,15 @@ export function RealMap({
     /* The rider asked to look at a city, so the camera stops chasing them, for now. */
     pauseFollow();
     fly(800);
+    const [w, south, e, n] = frame.bounds;
+    /*
+      Most cities are bigger than one screen at the zoom where shops show. Fitting the whole
+      city would stop short of that zoom and show only its colour, with no shops at all.
+    */
+    if (frame.centre && Math.max(e - w, n - south) > FITS_AT_SHOP_ZOOM) {
+      camera.current?.flyTo({ center: frame.centre, zoom: CITY_ZOOM, pitch: tilt(), duration: 800 });
+      return;
+    }
     camera.current?.fitBounds(frame.bounds, {
       padding: { top: obscuredTop + 40, left: 50, right: 50, bottom: Math.max(80, obscuredBottom * 0.25) },
       duration: 800,
@@ -846,6 +882,40 @@ export function RealMap({
     camera.current?.easeTo({ center: rider, bearing, pitch: tilt(course !== null), duration: 500 });
   };
 
+  /*
+    THE ARROW TO THE SELECTED SHOP (Charls, 5 Nov: direction only, no live time or distance).
+    Worked out from the map's own two points, not the phone's compass, so it is right in 2D and
+    in 3D, works offline, and can never disagree with what the map shows.
+  */
+  const straightArrow =
+    rider && focusLng !== undefined && focusLat !== undefined && metresBetween(rider, [focusLng, focusLat]) >= ARROW_MIN_M
+      ? bearingTo(rider, [focusLng, focusLat])
+      : null;
+
+  /*
+    THE ROAD LINE (Charls, 7 Nov, demo only): asked for ONCE PER TAP, from where the rider is at
+    that moment, so `nonce` is what triggers it and riding on does not. Tapping again redraws it.
+    Until it arrives, and whenever it does not, the rider has the straight arrow above.
+  */
+  const [roadLine, setRoadLine] = useState<{ shopId: string; feature: GeoJSON.Feature } | null>(null);
+  useEffect(() => {
+    if (!rider || focusId === undefined || focusLng === undefined || focusLat === undefined || straightArrow === null) return;
+    const cancel = new AbortController();
+    const shopId = focusId;
+    fetchRoadLine(rider, [focusLng, focusLat], cancel.signal).then((coordinates) => {
+      if (cancel.signal.aborted) return;
+      setRoadLine(
+        coordinates
+          ? { shopId, feature: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } } }
+          : null,
+      );
+    });
+    return () => cancel.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.nonce]);
+  /* Only for the shop it was drawn to. Closing the shop, or opening another, takes it away. */
+  const lineToShop = roadLine && roadLine.shopId === focusId ? roadLine.feature : null;
+
   const s = styles(theme);
 
   return (
@@ -923,12 +993,12 @@ export function RealMap({
         */}
         <Images images={light ? LIGHT_IMAGES : MAP_IMAGES} />
         {/*
-          The rider's pictures on their own, keyed by the look: on Save the old set's
-          component goes away, and with it its 25 pictures (MLRNImages removes its own
-          images when it leaves the map), instead of every look tried piling up in memory.
+          The rider's pictures on their own, keyed by the ride: when a new one is ready the old
+          set's component goes away, and with it its 9 pictures (MLRNImages removes its own
+          images when it leaves the map), instead of every ride tried piling up in memory.
           None in Light: the rider is a plain dot there.
         */}
-        {!light && <Images key={lookKey} images={riderImgs} />}
+        {!light && <Images key={ridePics.key} images={ridePics.images} />}
 
         {/*
           EVERY LAYER CARRIES A KEY, AND THAT IS A CRASH FIX, NOT TIDINESS.
@@ -1027,6 +1097,69 @@ export function RealMap({
         </GeoJSONSource>
 
         {/*
+          THE CITIES, COLOURED (Charls, 5 Nov), only to tell them apart, on the zoomed-out map. No
+          names of our own: the base map has them, and adding ours showed most cities twice.
+          Under the roads and names, so those stay readable. City outlines run out over Manila
+          Bay, so a copy of the style's water goes on top of the colour to take it back off the
+          sea. Only once the style has loaded: `beforeId` and the water both read the style.
+        */}
+        {everLoaded && (
+          <GeoJSONSource
+            id="city-areas"
+            data={CITY_AREAS}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              const area = e.nativeEvent.features?.[0]?.properties?.area;
+              if (typeof area === 'string') onPressCity?.(area as Area);
+            }}
+          >
+            <Layer
+              key="city-fill"
+              id="city-fill"
+              type="fill"
+              /* Named, not left to mount order: the sea would stay coloured if this landed on top. */
+              beforeId="city-water"
+              maxzoom={FLAT_BELOW_ZOOM}
+              paint={{
+                'fill-color': [
+                  'match', ['get', 'tone'],
+                  0, CITY_TONES[0],
+                  1, CITY_TONES[1],
+                  2, CITY_TONES[2],
+                  3, CITY_TONES[3],
+                  CITY_TONES[4],
+                ],
+                'fill-opacity': ['interpolate', ['linear'], ['zoom'], CITY_FADE_FROM, 0.5, FLAT_BELOW_ZOOM, 0],
+              }}
+            />
+          </GeoJSONSource>
+        )}
+        {everLoaded && (
+          <Layer
+            key="city-water"
+            id="city-water"
+            type="fill"
+            source="openmaptiles"
+            source-layer="water"
+            beforeId={FIRST_ABOVE_LAND}
+            maxzoom={FLAT_BELOW_ZOOM}
+            paint={{ 'fill-color': dark ? WATER_COLOUR.dark : WATER_COLOUR.light }}
+          />
+        )}
+        {everLoaded && selectedCity && (
+          <GeoJSONSource id="city-selected" data={CITY_AREAS}>
+            <Layer
+              key="city-selected-line"
+              id="city-selected-line"
+              type="line"
+              beforeId={dark ? FIRST_LABEL.dark : FIRST_LABEL.light}
+              filter={['==', ['get', 'area'], selectedCity]}
+              paint={{ 'line-color': mapTheme.accent, 'line-width': 2, 'line-opacity': 0.7 }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {/*
           HOW FAR THE RIDER ASKED TO LOOK.
 
           This setting existed with nothing behind it: the ring was only ever drawn on the
@@ -1063,12 +1196,15 @@ export function RealMap({
         )}
 
         {/*
-          ONE SOURCE, FOUR LAYERS, NO REACT VIEWS.
+          ONE SOURCE, THREE LAYERS, NO REACT VIEWS.
 
           `cluster` is the whole point: the map groups shops that are too close together
-          to tell apart into a single numbered circle, and splits them as the rider zooms
-          in. Without it, two thousand seven hundred pins overlap into an unreadable mass
-          AND overwhelm the thread that draws them.
+          to tell apart into a single circle, and splits them as the rider zooms in. Without
+          it, two thousand seven hundred pins overlap into an unreadable mass AND overwhelm
+          the thread that draws them.
+
+          NO NUMBERS ON THE GROUPS (Charls, 5 Nov): tapping a city gives its count instead. And
+          nothing here below the zoom switch, where the coloured cities have the map.
         */}
         <GeoJSONSource
           id="shops"
@@ -1082,22 +1218,23 @@ export function RealMap({
           hitbox={HITBOX_SMALL}
         >
           {/*
-            Cluster circles, sized by how many shops they hold. Stepped rather than
-            continuous, so the sizes read as a few distinct classes instead of a smear
-            where every circle is slightly different from its neighbour.
+            Groups of shops, a little bigger for bigger groups. With no number to say so, a group
+            has to look nothing like a single shop. Standard: a glossy ball against a pin. Light,
+            where both are flat circles: a HOLLOW ring against a solid dot, stepped so the sizes
+            read as a few classes. Hollow is white, not see-through, so a road never runs through it.
           */}
           {light ? (
-            /* Light: a plain circle, a little bigger for bigger groups. */
             <Layer
               key="shop-cluster-dot"
               id="shop-cluster-dot"
               type="circle"
+              minzoom={FLAT_BELOW_ZOOM}
               filter={['has', 'point_count']}
               paint={{
-                'circle-radius': ['step', ['get', 'point_count'], 11, 20, 14, 100, 17],
-                'circle-color': mapTheme.accent,
-                'circle-stroke-color': '#FFFFFF',
-                'circle-stroke-width': 1.5,
+                'circle-radius': ['step', ['get', 'point_count'], 8, 20, 10, 100, 12],
+                'circle-color': '#FFFFFF',
+                'circle-stroke-color': mapTheme.accent,
+                'circle-stroke-width': 4,
               }}
             />
           ) : (
@@ -1105,13 +1242,14 @@ export function RealMap({
             key="shop-cluster"
             id="shop-cluster"
             type="symbol"
+            minzoom={FLAT_BELOW_ZOOM}
             filter={['has', 'point_count']}
             layout={{
               'icon-image': 'sphere',
               /*
                 SMALL WHEN ZOOMED OUT (design canvas, 30 Oct): a group grows slowly with its
-                count and the whole set shrinks as the map zooms out, so the city reads first
-                and the numbers second. The sphere picture is 96 px across at 1x.
+                count and the whole set shrinks as the map zooms out, so the city reads first.
+                The sphere picture is 96 px across at 1x.
               */
               'icon-size': [
                 'interpolate', ['linear'], ['zoom'],
@@ -1124,25 +1262,6 @@ export function RealMap({
           />
           )}
 
-          <Layer
-              key="shop-cluster-count"
-              id="shop-cluster-count"
-            type="symbol"
-            filter={['has', 'point_count']}
-            layout={{
-              /* `_abbreviated` turns 1,240 into "1.2k" so a big cluster still fits. */
-              'text-field': ['get', 'point_count_abbreviated'],
-              'text-font': LABEL_FONT,
-              'text-size': ['interpolate', ['linear'], ['zoom'], 10, 9.5, 14, 12],
-              'text-offset': [0, -0.15],
-              /* Counts must never be dropped for overlapping: a circle with no number
-                 on it looks like a shop, which is exactly the wrong reading. */
-              'text-allow-overlap': true,
-              'text-ignore-placement': true,
-            }}
-            paint={{ 'text-color': '#FFFFFF', 'text-halo-color': 'rgba(60,20,10,0.55)', 'text-halo-width': 1 }}
-          />
-
           {/* A single shop, once it is no longer part of a cluster. */}
           {light ? (
             /*
@@ -1153,6 +1272,7 @@ export function RealMap({
               key="shop-dot"
               id="shop-dot"
               type="circle"
+              minzoom={FLAT_BELOW_ZOOM}
               filter={['!', ['has', 'point_count']]}
               paint={{
                 'circle-radius': 6.5,
@@ -1171,6 +1291,7 @@ export function RealMap({
             key="shop-point"
             id="shop-point"
             type="symbol"
+            minzoom={FLAT_BELOW_ZOOM}
             filter={['!', ['has', 'point_count']]}
             layout={{
               /*
@@ -1305,6 +1426,50 @@ export function RealMap({
         )}
 
         {/*
+          THE ROAD LINE: a white edge, the oxide line, and the arrow picture repeated along it. Under
+          the shops and the rider, by name, because a layer that appears later otherwise lands on
+          top of everything. `symbol-placement: line` lays the picture's right-hand side along the
+          way the line runs; the picture points up, so a quarter turn points it down the road.
+        */}
+        {lineToShop && (
+          <GeoJSONSource id="road-line" data={lineToShop}>
+            <Layer
+              key="road-line-edge"
+              id="road-line-edge"
+              type="line"
+              beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': '#FFFFFF', 'line-width': 8 }}
+            />
+            <Layer
+              key="road-line-main"
+              id="road-line-main"
+              type="line"
+              beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': mapTheme.accent, 'line-width': 5 }}
+            />
+            <Layer
+              key="road-line-arrows"
+              id="road-line-arrows"
+              type="symbol"
+              beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
+              layout={{
+                'symbol-placement': 'line',
+                'symbol-spacing': 90,
+                'icon-image': 'direction-arrow',
+                'icon-size': 0.24,
+                'icon-rotate': 90,
+                'icon-rotation-alignment': 'map',
+                'icon-pitch-alignment': 'map',
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true,
+              }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {/*
           THE RIDER, DRAWN BY THE MAP.
 
           This was a `Marker` — a React view positioned from JavaScript, which means it is
@@ -1333,8 +1498,9 @@ export function RealMap({
           glide={course != null && !light}
           light={light}
           frame={settings.map3d && !zoomedOut ? frameFor(heading, mapBearing) : null}
-          look={lookKey}
+          pictures={ridePics.key}
           scale={sizeScale(settings.ride.size)}
+          arrow={lineToShop ? null : straightArrow}
         />
 
       </MapView>
@@ -1462,6 +1628,7 @@ export function RealMap({
       <Pressable
         onPress={() =>
           Alert.alert('Map data', ATTRIBUTION, [
+            { text: 'Report a map error', onPress: () => Linking.openURL(OSM_FIX) },
             { text: 'Open licence', onPress: () => Linking.openURL(OSM_COPYRIGHT) },
             { text: 'Close', style: 'cancel' },
           ])
@@ -1473,6 +1640,11 @@ export function RealMap({
       >
         <InfoIcon size={15} color={theme.ink3} />
       </Pressable>
+      {everLoaded && !creditDone && !mapHidden && (
+        <View style={[s.creditLine, { bottom: obscuredBottom + 10 }]} pointerEvents="none">
+          <Text style={s.creditText}>{CREDIT_LINE}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -1562,6 +1734,18 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       Bottom LEFT, opposite the locate button. The corner the rider presses often should
       not share a corner with the one they press never.
     */
+    /* Beside the info button, for the first 5 seconds. */
+    creditLine: {
+      position: 'absolute',
+      left: 42,
+      height: 24,
+      paddingHorizontal: 8,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      opacity: 0.9,
+    },
+    creditText: { fontSize: 11, color: theme.ink2 },
     attrib: {
       position: 'absolute',
       left: 12,
@@ -1622,20 +1806,23 @@ function RiderMark({
   riderLive,
   glide,
   frame,
-  look,
+  pictures,
   scale,
+  arrow,
   light = false,
 }: {
   rider: [number, number] | null;
   heading: number | null;
   riderLive: boolean;
   glide: boolean;
-  /** Which of the 24 bike pictures fits the map's turn in 3D, or null for the 2D bike from above. */
+  /** Which of the 8 pictures fits the map's turn in 3D, or null for the 2D bike from above. */
   frame: number | null;
-  /** Which Your ride look's pictures to use: see `riderImages`. */
-  look: string;
+  /** The ride's finished pictures on the map are named after this (features/ride/pictures.ts). */
+  pictures: string;
   /** Your ride's size: S, M or L as a multiple of the default. */
   scale: number;
+  /** Degrees clockwise from north to the selected shop, or null for no arrow. */
+  arrow: number | null;
   /** Graphics: Light. One glow ring instead of five. */
   light?: boolean;
 }) {
@@ -1699,17 +1886,43 @@ function RiderMark({
 
 
         {/*
-          3D: the bike from the Blender model, the picture for the rider's direction relative
-          to the map, standing up toward the camera. While riding the map turns with the rider,
-          so this is the bike seen from behind.
+          THE ARROW TO THE SELECTED SHOP, lying on the road like the beam, under the bike. Anchored
+          at its tail and turned about it, so it swings round the rider; the offset leaves a gap
+          for the bike and turns with it.
+        */}
+        {arrow !== null && (
+          <Layer
+            key="rider-arrow"
+            id="rider-arrow"
+            type="symbol"
+            layout={{
+              'icon-image': 'direction-arrow',
+              'icon-size': byZoom(0.34),
+              'icon-anchor': 'bottom',
+              'icon-offset': [0, -46],
+              'icon-rotate': arrow,
+              'icon-rotation-alignment': 'map',
+              'icon-pitch-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            }}
+            paint={{ 'icon-opacity': riderLive ? 1 : 0.5 }}
+          />
+        )}
+
+        {/*
+          3D: the finished picture for the rider's direction relative to the map, standing up
+          toward the camera. While riding the map turns with the rider, so this is the bike seen
+          from behind. ONE layer, whatever the ride has on it: the parts were put together when
+          it was saved.
         */}
         {frame !== null && (
           <Layer
-            key="rider-bike3d"
-            id="rider-bike3d"
+            key="rider-3d"
+            id="rider-3d"
             type="symbol"
             layout={{
-              'icon-image': `rider-${look}-a${frame}`,
+              'icon-image': `${pictures}-m${frame}`,
               'icon-size': byZoom(BIKE_3D_SIZE * scale),
               'icon-offset': [0, BIKE_3D_LIFT],
               'icon-pitch-alignment': 'viewport',
@@ -1738,26 +1951,26 @@ function RiderMark({
           />
         )}
 
-        {/* 2D: the same bike from straight above, turned with the heading. */}
+        {/* 2D: the same ride from straight above, turned with the heading. */}
         {frame === null && !light && (
-        <Layer
-          key="rider-top"
-          id="rider-top"
-          type="symbol"
-          layout={{
-            'icon-image': `rider-${look}-top`,
-            'icon-size': byZoom(BIKE_2D_SIZE * scale),
-            /*
-              Points north until the compass reports. A motorcycle has to point
-              somewhere, and north is the one direction that is not a claim.
-            */
-            'icon-rotate': heading ?? 0,
-            'icon-rotation-alignment': 'map',
-            'icon-allow-overlap': true,
-            'icon-ignore-placement': true,
-          }}
-          paint={{ 'icon-opacity': riderLive ? 1 : 0.5 }}
-        />
+          <Layer
+            key="rider-2d"
+            id="rider-2d"
+            type="symbol"
+            layout={{
+              'icon-image': `${pictures}-top`,
+              'icon-size': byZoom(BIKE_2D_SIZE * scale),
+              /*
+                Points north until the compass reports. A motorcycle has to point
+                somewhere, and north is the one direction that is not a claim.
+              */
+              'icon-rotate': heading ?? 0,
+              'icon-rotation-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            }}
+            paint={{ 'icon-opacity': riderLive ? 1 : 0.5 }}
+          />
         )}
 
       </GeoJSONSource>
