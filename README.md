@@ -345,6 +345,15 @@ Published over the air on 5 and 7 Nov 2026 (latest update 01a1b4db), not yet che
   app is open with the screen on, and the bike's reading can be typed by hand. Only the numbers
   are kept, on the phone, never a position or a route
 
+Published over the air on 11 Nov 2026 (update 01a1c904), not yet checked on a phone:
+
+- The shop list from the 11 Nov survey sheet: 2,897 shops (16 new, 11 removed, some of them
+  renames)
+- Services beyond dealer, repair, parts and accessories ("Change oil", "Motor wash", "Helmet
+  detailing") show as typed on the shop list and in shop details, and search finds them. A shop
+  with no type gets its pin from its services: helmet detailing as accessories, any other
+  service as repair
+
 Not built yet:
 
 - Live 3D in Your ride (smooth turning, parts as 3D models); needs a new APK
