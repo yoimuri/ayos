@@ -40,6 +40,10 @@ type RawShop = {
   lat: number;
   lng: number;
   tags: string[];
+  /** Service words that are not one of the four types, as typed ("Change oil"). */
+  services?: string[];
+  /** The pin type for a shop with no type, from its services (Charls, 11 Nov). */
+  kind?: string;
   /** Old shape only. */
   phone?: string;
   phones?: string[];
@@ -136,13 +140,17 @@ function linkFor(url: string): ShopLink {
 function widen(raw: RawShop, from: [number, number], now: Date): Shop {
   const phones = raw.phones ?? (raw.phone ? [raw.phone] : []);
   const { status, until } = statusAt(raw.hours, now);
+  const typed = raw.tags.filter((t) => TAGS.has(t)) as ShopTag[];
+  /* A motor wash shows a repair pin and turns up under Nearest repair, but reads "Motor wash". */
+  const tags = typed.length > 0 || !raw.kind || !TAGS.has(raw.kind) ? typed : [raw.kind as ShopTag];
   return {
     id: raw.id,
     name: raw.name,
     address: raw.address ?? '',
     phone: phones[0] ?? null,
     phones,
-    tags: raw.tags.filter((t) => TAGS.has(t)) as ShopTag[],
+    tags,
+    services: [...typed, ...(raw.services ?? [])],
     status,
     openUntil: until,
     hours: raw.hours,
@@ -256,6 +264,7 @@ function patched(shop: Shop, v: Partial<Record<LogField, string>>, from: [number
     phone: phones[0] ?? null,
     links: v.social !== undefined ? parseLinks(v.social).map(linkFor) : shop.links,
     tags: v.services !== undefined ? (parseTags(v.services) as ShopTag[]) : shop.tags,
+    services: v.services !== undefined ? parseTags(v.services) : shop.services,
     hours,
     status,
     openUntil: until,
@@ -274,6 +283,7 @@ function fromNewShop(n: NewShop, from: [number, number], now: Date): Shop {
     phone: phones[0] ?? null,
     phones,
     tags: parseTags(n.values.services ?? '') as ShopTag[],
+    services: parseTags(n.values.services ?? ''),
     status,
     openUntil: until,
     hours,

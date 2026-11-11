@@ -262,9 +262,9 @@ export function ShopDetailsBody({ shop, onRate }: { shop: Shop; onRate: () => vo
       */}
       <PhotoStrip photos={[]} />
 
-      {shop.tags.length > 0 && (
+      {shop.services.length > 0 && (
         <View style={s.tagRow}>
-          {shop.tags.map((tag) => (
+          {shop.services.map((tag) => (
             <View key={tag} style={s.tag}>
               <Text style={s.tagText}>{tag}</Text>
             </View>

@@ -440,7 +440,8 @@ export default function HomeScreen() {
     return ofKind.filter(
       (shop) =>
         shop.name.toLowerCase().includes(needle) ||
-        shop.tags.some((tag) => tag.includes(needle)),
+        shop.tags.some((tag) => tag.includes(needle)) ||
+        shop.services.some((word) => word.toLowerCase().includes(needle)),
     );
   }, [areaShops, query, kind]);
 
@@ -1315,7 +1316,7 @@ function ShopRow({
             </Text>
           </View>
           <Text style={s.tags} numberOfLines={1}>
-            {shop.tags.join(', ')}
+            {shop.services.join(', ')}
           </Text>
         </View>
         {marks.length > 0 && <Text style={s.marks}>{marks.join(' · ')}</Text>}

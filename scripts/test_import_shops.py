@@ -60,6 +60,33 @@ class Tags(unittest.TestCase):
         self.assertEqual(parse_tags(None), ([], []))
 
 
+class Services(unittest.TestCase):
+    """Charls, 11 Nov: pins follow the type, riders still read the services as typed."""
+
+    def test_other_services_are_kept_as_typed(self):
+        shops, _ = build([row(2, services="Parts, Change oil, General Maintenance")])
+        self.assertEqual(shops[0]["tags"], ["parts"])
+        self.assertEqual(shops[0]["services"], ["Change oil", "General Maintenance"])
+        self.assertNotIn("kind", shops[0], "a typed shop keeps its own type")
+
+    def test_no_type_maintenance_or_wash_is_a_repair_pin(self):
+        for typed in ("General Maintenance, Change oil", "Motor wash"):
+            shops, _ = build([row(2, services=typed)])
+            self.assertEqual(shops[0]["tags"], [], typed)
+            self.assertEqual(shops[0]["kind"], "repair", typed)
+
+    def test_no_type_helmet_detailing_is_an_accessories_pin(self):
+        shops, _ = build([row(2, services="Helmet detailing")])
+        self.assertEqual(shops[0]["kind"], "accessories")
+        self.assertEqual(shops[0]["services"], ["Helmet detailing"])
+
+    def test_no_services_at_all_gets_no_type(self):
+        shops, facts = build([row(2, services=None)])
+        self.assertNotIn("kind", shops[0])
+        self.assertNotIn("services", shops[0])
+        self.assertEqual(len(facts["no_tags"]), 1)
+
+
 class Phones(unittest.TestCase):
     def test_mobile_formats(self):
         for typed in ("0915 9777778", "09159777778", "+63 915 977 7778", "9159777778"):

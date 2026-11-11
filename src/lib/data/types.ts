@@ -25,7 +25,13 @@ export type Shop = {
   phone: string | null;
   /** Every number collected, in the order the sheet lists them. */
   phones: string[];
+  /**
+   * The four types, which drive the pin and the kind filters. A shop typed with services
+   * only (motor wash, helmet detailing) gets one worked out from them (scripts/import_shops.py).
+   */
   tags: ShopTag[];
+  /** What the rider reads: the types as typed, then every other service as typed. */
+  services: string[];
   /** Worked out from `hours` when the shop list is built. `unknown` when not collected. */
   status: OpenStatus;
   /** Closing time for "Open now · until 8 PM". Absent for all-day shops. */

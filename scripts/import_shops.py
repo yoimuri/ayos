@@ -37,7 +37,10 @@ THE RULES, each one written down so a bad row is explained rather than lost:
 
     - line breaks and stray spaces are removed from every cell
     - "None", "N/A", "-" and empty cells all become "no value" (null), never the text
-    - service tags: only dealer / repair / parts / accessories; blanks dropped
+    - service tags: only dealer / repair / parts / accessories; blanks dropped. Every
+      other service word ("Change oil", "Motor wash") is kept as typed in `services`, for
+      riders to read. A shop with no type gets a pin type (`kind`) from its services:
+      helmet detailing is accessories, anything else is repair (Charls, 11 Nov)
     - a row with no usable coordinates is SKIPPED and listed by row number
     - likely duplicates (within 75 m, similar name) are FLAGGED and BOTH are kept.
       Nothing is ever merged here: deciding two rows are one shop is a judgement
@@ -195,6 +198,21 @@ def parse_tags(value):
         else:
             unknown.append(piece.strip())
     return sorted(tags), unknown
+
+
+def kind_from_services(words):
+    """
+    The pin type for a shop typed with services but none of the four types (Charls, 11 Nov):
+    helmet detailing counts as accessories, every other service (general maintenance, motor
+    wash, change oil and the rest, all work done on the bike) as repair. Only the pin and the
+    "nearest" filter use it; the rider still sees the services as typed. None when the shop
+    has no services at all.
+    """
+    if not words:
+        return None
+    if all("helmet" in w.lower() for w in words):
+        return "accessories"
+    return "repair"
 
 
 # ------------------------------------------------------------------ phones
@@ -540,8 +558,17 @@ def build(rows):
 
         tags, unknown = parse_tags(row.get("services"))
         unknown_tags.update(unknown)
+        """
+        The other service words are kept, as typed, for the rider to read (Charls, 11 Nov:
+        "still display the services as provided"). Only the four types drive pins and filters.
+        """
+        services = []
+        for word in unknown:
+            if word.lower() not in (s.lower() for s in services):
+                services.append(word)
+        kind = None if tags else kind_from_services(services)
         if not tags:
-            no_tags.append((n, name))
+            no_tags.append((n, name, kind or "none: default repair pin, not in Nearest"))
 
         sid = ids.get(n)
         if sid is None:
@@ -556,6 +583,10 @@ def build(rows):
             "lng": round(lng, 6),
             "tags": tags,
         }
+        if services:
+            shop["services"] = services
+        if kind:
+            shop["kind"] = kind
         address = clean_text(row.get("address"))
         if address:
             shop["address"] = address
@@ -752,12 +783,14 @@ def write_report(path, source, sheet, collected_at, rows, shops, facts, diff, si
     L.append("")
     L.append("## Other things to fix in the sheet")
     L.append("")
-    L.append("**Rows with no service tag** (imported with no tags):")
+    L.append("**Rows with no type** (dealer / repair / parts / accessories). Their pin type comes "
+             "from their services: helmet detailing is accessories, any other service is repair:")
     L.append("")
-    L.append(table(["row", "name"], facts["no_tags"]) if facts["no_tags"] else "_none_")
+    L.append(table(["row", "name", "pin type"], facts["no_tags"]) if facts["no_tags"] else "_none_")
     L.append("")
     if facts["unknown_tags"]:
-        L.append("**Service words that are not dealer / repair / parts / accessories** (dropped):")
+        L.append("**Service words that are not dealer / repair / parts / accessories** "
+                 "(shown to riders as typed, not used for pins or filters):")
         L.append("")
         L.append(table(["word", "times"], facts["unknown_tags"].most_common()))
         L.append("")
