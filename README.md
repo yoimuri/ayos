@@ -365,6 +365,12 @@ Version 1.4.0, new APK (23 Nov 2026, build c70b9efc), not yet checked on a phone
 - Expo patch updates, updates now matched to the app by its native code (fingerprint), four
   unused native packages removed, and the 3D library compiled in for live 3D in Your ride later
 
+Published over the air to 1.4.0 on 23 Nov 2026 (update 01a2076e), not yet checked on a phone:
+
+- The road line's arrows are small white chevrons inside the line, and the line, the chevrons
+  and the selected shop's pin shrink as the map zooms out
+- The 2D/3D button is on the bottom left, away from the recentre button
+
 Not built yet:
 
 - Live 3D in Your ride (smooth turning, parts as 3D models); the 3D library is in the 1.4.0 APK,
