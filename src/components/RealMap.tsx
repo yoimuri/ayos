@@ -272,6 +272,7 @@ const MAP_IMAGES = {
   sphere: { source: require('../../assets/images/map/sphere.png') },
   'pin-ring': { source: require('../../assets/images/map/pin-ring.png') },
   'direction-arrow': { source: require('../../assets/images/map/direction-arrow.png') },
+  'line-chevron': { source: require('../../assets/images/map/line-chevron.png') },
 };
 
 /**
@@ -283,6 +284,7 @@ const MAP_IMAGES = {
 const LIGHT_IMAGES = {
   'headlight-beam': { source: require('../../assets/images/map/headlight-beam.png') },
   'direction-arrow': { source: require('../../assets/images/map/direction-arrow.png') },
+  'line-chevron': { source: require('../../assets/images/map/line-chevron.png') },
 };
 
 /** Stable hitboxes, for the same reason the images are stable. */
@@ -1425,10 +1427,10 @@ export function RealMap({
                 id="selected-dot"
                 type="circle"
                 paint={{
-                  'circle-radius': 10,
+                  'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 6, 15, 10],
                   'circle-color': mapTheme.accent,
                   'circle-stroke-color': '#FFFFFF',
-                  'circle-stroke-width': 3,
+                  'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 2, 15, 3],
                 }}
               />
             )}
@@ -1439,7 +1441,8 @@ export function RealMap({
               type="symbol"
               layout={{
                 'icon-image': 'pin-ring',
-                'icon-size': 0.45,
+                /* Smaller zoomed out, like the rider (Clint, 23 Nov: it stayed too big). */
+                'icon-size': byZoom(0.45),
                 /* Lying on the road, under the pin. */
                 'icon-pitch-alignment': 'map',
                 'icon-allow-overlap': true,
@@ -1454,7 +1457,8 @@ export function RealMap({
               type="symbol"
               layout={{
                 'icon-image': focusPin,
-                'icon-size': 0.46,
+                /* Smaller zoomed out, like the rider (Clint, 23 Nov: it stayed too big). */
+                'icon-size': byZoom(0.46),
                 /* Anchored at its point, which is where the shop actually is. */
                 'icon-anchor': 'bottom',
                 'icon-offset': [0, 12],
@@ -1468,10 +1472,15 @@ export function RealMap({
         )}
 
         {/*
-          THE ROAD LINE: a white edge, the oxide line, and the arrow picture repeated along it. Under
-          the shops and the rider, by name, because a layer that appears later otherwise lands on
-          top of everything. `symbol-placement: line` lays the picture's right-hand side along the
-          way the line runs; the picture points up, so a quarter turn points it down the road.
+          THE ROAD LINE: a white edge, the oxide line, and small white chevrons inside it, as in Google
+          Maps. Under the shops and the rider, by name, because a layer that appears later otherwise
+          lands on top of everything. `symbol-placement: line` lays the picture's right-hand side along
+          the way the line runs; the picture points up, so a quarter turn points it down the road.
+
+          THINNER AND SMALLER ZOOMED OUT (Clint, 23 Nov: the arrows were too big and bold, and the line
+          stayed fat as the map zoomed out). The old arrow was the big oxide direction arrow, wider
+          than the line itself. Widths and the chevrons now ease down with the zoom, and below zoom
+          12, where the whole route fits on screen, the chevrons go and the line alone shows the way.
         */}
         {lineToShop && (
           <GeoJSONSource id="road-line" data={lineToShop}>
@@ -1481,7 +1490,7 @@ export function RealMap({
               type="line"
               beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{ 'line-color': '#FFFFFF', 'line-width': 8 }}
+              paint={{ 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 4, 14, 7, 17, 10] }}
             />
             <Layer
               key="road-line-main"
@@ -1489,18 +1498,19 @@ export function RealMap({
               type="line"
               beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{ 'line-color': mapTheme.accent, 'line-width': 5 }}
+              paint={{ 'line-color': mapTheme.accent, 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 2.5, 14, 4.5, 17, 7] }}
             />
             <Layer
               key="road-line-arrows"
               id="road-line-arrows"
               type="symbol"
+              minzoom={12}
               beforeId={light ? 'shop-cluster-dot' : 'shop-cluster'}
               layout={{
                 'symbol-placement': 'line',
-                'symbol-spacing': 90,
-                'icon-image': 'direction-arrow',
-                'icon-size': 0.24,
+                'symbol-spacing': 60,
+                'icon-image': 'line-chevron',
+                'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.13, 14, 0.17, 17, 0.25],
                 'icon-rotate': 90,
                 'icon-rotation-alignment': 'map',
                 'icon-pitch-alignment': 'map',
@@ -1565,7 +1575,12 @@ export function RealMap({
             soon as the rider zooms back in.
           */
           disabled={zoomedOut}
-          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + (rider ? 68 : 14) }, pressed && s.pressed, zoomedOut && s.resting]}
+          /*
+            LEFT SIDE (Clint, 23 Nov): right above recentre it took taps meant for recentre while
+            riding. Above the credit button, the road-line note and the new-version chip (which
+            reaches 78 px), so it never covers them.
+          */
+          style={({ pressed }) => [s.leftBtn, { bottom: obscuredBottom + 86 }, pressed && s.pressed, zoomedOut && s.resting]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityState={{ disabled: zoomedOut }}
@@ -1585,7 +1600,7 @@ export function RealMap({
       {!mapHidden && onToggleBare && !light && (
         <Pressable
           onPress={onToggleBare}
-          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + (bare ? 14 : rider ? 122 : 68) }, pressed && s.pressed]}
+          style={({ pressed }) => [s.locBtn, { bottom: obscuredBottom + (bare || !rider ? 14 : 68) }, pressed && s.pressed]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={bare ? 'Show the controls again' : 'Show only the map'}
@@ -1719,6 +1734,8 @@ const styles = (theme: ReturnType<typeof useSettings>['theme']) =>
       riders who use Google Maps already reach for the locate button.
     */
     locBtn: { position: 'absolute', right: 14 },
+    /* The 2D/3D button, away from recentre (Clint, 23 Nov). */
+    leftBtn: { position: 'absolute', left: 14 },
     pressed: { opacity: 0.6 },
     /* Floating over the map: round, lifted by a soft shadow, no outline. */
     locOuter: {
