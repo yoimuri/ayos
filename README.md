@@ -354,9 +354,21 @@ Published over the air on 11 Nov 2026 (update 01a1c904), not yet checked on a ph
   with no type gets its pin from its services: helmet detailing as accessories, any other
   service as repair
 
+Version 1.4.0, new APK (23 Nov 2026, build c70b9efc), not yet checked on a phone:
+
+- Location on phones without Google's services (Huawei): when Google's location service sends
+  nothing for 8 seconds, Android's own location system takes over. Build info shows which one
+  is in use
+- The ride counter keeps counting with the phone locked, with an "Ayoos ride counter"
+  notification while the ride runs (not on phones without Google, where the screen stays on)
+- Android backup is off, so app data no longer copies to the rider's Google account
+- Expo patch updates, updates now matched to the app by its native code (fingerprint), four
+  unused native packages removed, and the 3D library compiled in for live 3D in Your ride later
+
 Not built yet:
 
-- Live 3D in Your ride (smooth turning, parts as 3D models); needs a new APK
+- Live 3D in Your ride (smooth turning, parts as 3D models); the 3D library is in the 1.4.0 APK,
+  the feature itself is not built
 
 - A backend and database, so the shop list can be updated without a new app release
 - Saving ratings to a server (today a rating stays on the phone that gave it), legal pages
