@@ -252,6 +252,9 @@ export type Strings = {
   thisRide: string;
   lastRide: string;
   countsWhileOpen: string;
+  /** The notification while a ride counts with the phone locked (lockedRide.ts). */
+  rideCounterTitle: string;
+  rideCounterBody: string;
   yourRide: string;
   rideVehicle: string;
   rideSize: string;
@@ -530,6 +533,8 @@ const en: Strings = {
   thisRide: 'This ride',
   lastRide: 'Last ride',
   countsWhileOpen: 'Counts while Ayoos is open',
+  rideCounterTitle: 'Ayoos ride counter',
+  rideCounterBody: 'Counting this ride',
   yourRide: 'Your ride',
   rideVehicle: 'Vehicle',
   rideSize: 'Size on the map',
@@ -807,6 +812,8 @@ const tl: Strings = {
   thisRide: 'Biyaheng ito',
   lastRide: 'Huling biyahe',
   countsWhileOpen: 'Bumibilang habang bukas ang Ayoos',
+  rideCounterTitle: 'Ayoos ride counter',
+  rideCounterBody: 'Binibilang ang biyaheng ito',
   yourRide: 'Ang motor mo',
   rideVehicle: 'Sasakyan',
   rideSize: 'Laki sa mapa',

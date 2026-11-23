@@ -307,6 +307,8 @@ function BuildInfo() {
       {/* Why the live watch failed, word for word. Blank while it runs. */}
       <Text style={s.buildLine} selectable>
         Watch {gate.debug.watchError ? `FAILED: ${gate.debug.watchError}` : gate.status === 'ready' ? 'running' : '—'}
+        {/* google, or android on phones without Google's services (Huawei): androidFallback.ts */}
+        {' · '}source {gate.debug.source ?? '—'}
       </Text>
       {/*
         COMPARE WITH GOOGLE MAPS. If these numbers match Google's within about 10 m but

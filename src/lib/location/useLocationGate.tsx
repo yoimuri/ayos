@@ -4,6 +4,7 @@ import { Accelerometer, Magnetometer } from 'expo-sensors';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 
+import { startAndroidLocation, type Reading } from './androidFallback';
 import { isBetterFix, type Fix } from './betterFix';
 import { createHeadingFilter, shortestDelta } from './headingFilter';
 import { createPositionFilter } from './positionFilter';
@@ -73,6 +74,11 @@ export type LocationDebug = {
    * running. The one line that tells "location is on but Ayoos gets nothing" apart.
    */
   watchError: string | null;
+  /**
+   * Where the live readings come from: Google's location service, or Android's own when Google's
+   * gave nothing (phones without Google, like Huawei's). Null before the first reading.
+   */
+  source: 'google' | 'android' | null;
 };
 
 export type LocationGate = {
@@ -170,6 +176,12 @@ function rememberPosition(
 
 /** How long to wait before each retry of a failed position watch. */
 const WATCH_RETRY_MS = [3000, 10_000];
+/**
+ * How long Google's location service gets to send a first reading before Android's own location
+ * system is started as well (androidFallback.ts). On a phone without Google nothing ever comes;
+ * on a phone with it, a first reading normally lands well inside this.
+ */
+const FALLBACK_AFTER_MS = 8000;
 
 function useLocationGateState(): LocationGate {
   const [status, setStatus] = useState<LocationStatus>('checking');
@@ -190,6 +202,7 @@ function useLocationGateState(): LocationGate {
     raw: null,
     speed: null,
     watchError: null,
+    source: null,
   });
   const [precise, setPrecise] = useState<boolean | null>(null);
   /** The fix currently on screen, so a worse one can be refused. */
@@ -209,6 +222,10 @@ function useLocationGateState(): LocationGate {
   /** When the GPS last gave a direction of travel. While recent, it beats the compass. */
   const lastCourseAt = useRef<number | null>(null);
   const watching = useRef<Location.LocationSubscription | null>(null);
+  /* Android's own location system, running only when Google's gave nothing (androidFallback.ts). */
+  const fallbackStop = useRef<(() => void) | null>(null);
+  const fallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const googleReadings = useRef(0);
   const compass = useRef<Location.LocationSubscription | null>(null);
   /*
     THE TILT-CORRECTED COMPASS (lib/location/tiltHeading.ts): the raw sensors, eased, plus
@@ -232,6 +249,11 @@ function useLocationGateState(): LocationGate {
     settleTimer.current = null;
     watching.current?.remove();
     watching.current = null;
+    if (fallbackTimer.current) clearTimeout(fallbackTimer.current);
+    fallbackTimer.current = null;
+    fallbackStop.current?.();
+    fallbackStop.current = null;
+    googleReadings.current = 0;
     compass.current?.remove();
     compass.current = null;
     sensors.current.forEach((sub) => sub.remove());
@@ -308,6 +330,95 @@ function useLocationGateState(): LocationGate {
     setSettled(false);
     settleTimer.current = setTimeout(() => mounted.current && setSettled(true), SETTLE_TIMEOUT_MS);
     const generation = watchGeneration.current;
+    /*
+      ONE HANDLER FOR EVERY LIVE READING, whichever path it came by: Google's location service
+      (the watch below) or Android's own (androidFallback.ts, on phones without Google).
+    */
+    const onReading = (p: Reading, from: 'google' | 'android') => {
+      if (!mounted.current) return;
+      if (from === 'google') googleReadings.current += 1;
+      setDebug((d) => ({ ...d, raw: [p.coords.longitude, p.coords.latitude], speed: p.coords.speed ?? null, source: from }));
+
+      /*
+        DIRECTION OF TRAVEL, taken from EVERY fix, including ones the accuracy gate
+        below refuses: a slightly rough position still knows which way it is moving.
+        See course.ts for why this beats the compass while the bike is moving.
+      */
+      const moved = motion.current.push({
+        lng: p.coords.longitude,
+        lat: p.coords.latitude,
+        accuracy: p.coords.accuracy ?? null,
+        timestamp: p.timestamp,
+        speed: p.coords.speed,
+        heading: p.coords.heading,
+      });
+      if (moved.course !== null) {
+        lastCourseAt.current = Date.now();
+        setHeading(moved.course);
+      }
+      /* Only redrawn for a real change: a degree or two of course is not news. */
+      setCourse((c) =>
+        moved.course === null || c === null || Math.abs(((moved.course - c + 540) % 360) - 180) >= 2
+          ? moved.course
+          : c,
+      );
+      setSpeedMps(moved.speed);
+      const next: Fix = { accuracy: p.coords.accuracy ?? null, timestamp: p.timestamp };
+
+      /*
+        THE GATE THAT WAS MISSING. Android's fused provider mixes sources: an 8-metre
+        satellite fix can be followed a second later by a 200-metre WiFi fix, simply
+        because that is what arrived next. Taking every update meant the newest always
+        won, so a good fix was thrown away for a bad one and the dot moved to the next
+        street. Refusing a much worse reading is the whole fix.
+      */
+      if (!isBetterFix(next, held.current, Date.now())) {
+        counts.current.rejected += 1;
+        setDebug((d) => ({ ...d, rejected: counts.current.rejected }));
+        return;
+      }
+
+      held.current = next;
+      counts.current.accepted += 1;
+
+      /*
+        SMOOTHED, NOT RAW. In dense streets every fix carries 60-90 m of uncertainty,
+        and two readings 40 m apart are not evidence the rider moved — they are the
+        same reading with different noise. Drawing whichever arrived last is what
+        makes the dot wander across the block while someone stands still.
+      */
+      const fixed = posFilter.current.push({
+        lng: p.coords.longitude,
+        lat: p.coords.latitude,
+        accuracy: p.coords.accuracy ?? null,
+        timestamp: p.timestamp,
+        /* Measured when the phone reports none (or a constant 0): see motion.ts. */
+        speed: moved.speed,
+        course: moved.course,
+      });
+      if (fixed) {
+        setPosition([fixed.lng, fixed.lat]);
+        setFixAt(p.timestamp);
+        rememberPosition(lastSaved, fixed.lng, fixed.lat, p.timestamp, p.coords.accuracy ?? null, !!p.mocked);
+      }
+      /*
+        The PHONE's figure, not the filter's. Averaging makes the filter's own number
+        look far better than the readings deserve when the error is the slow, shared
+        kind indoors, and then the "rough fix" warning never appeared.
+      */
+      setAccuracyM(p.coords.accuracy ?? null);
+      setStale(false);
+      if (isGoodFix(p.coords.accuracy)) setSettled(true);
+      setDebug((d) => ({
+        ...d,
+        /* The raw figure, so the readout still reports what the OS actually said. */
+        accuracyM: p.coords.accuracy ?? null,
+        smoothedM: fixed ? Math.round(fixed.accuracy) : null,
+        ageS: Math.round((Date.now() - p.timestamp) / 1000),
+        mocked: p.mocked ?? null,
+        accepted: counts.current.accepted,
+      }));
+    };
     const startWatch = async () => {
       watching.current = await Location.watchPositionAsync(
         {
@@ -349,90 +460,7 @@ function useLocationGateState(): LocationGate {
           */
           mayShowUserSettingsDialog: false,
         },
-        (p) => {
-          if (!mounted.current) return;
-          setDebug((d) => ({ ...d, raw: [p.coords.longitude, p.coords.latitude], speed: p.coords.speed ?? null }));
-
-          /*
-            DIRECTION OF TRAVEL, taken from EVERY fix, including ones the accuracy gate
-            below refuses: a slightly rough position still knows which way it is moving.
-            See course.ts for why this beats the compass while the bike is moving.
-          */
-          const moved = motion.current.push({
-            lng: p.coords.longitude,
-            lat: p.coords.latitude,
-            accuracy: p.coords.accuracy ?? null,
-            timestamp: p.timestamp,
-            speed: p.coords.speed,
-            heading: p.coords.heading,
-          });
-          if (moved.course !== null) {
-            lastCourseAt.current = Date.now();
-            setHeading(moved.course);
-          }
-          /* Only redrawn for a real change: a degree or two of course is not news. */
-          setCourse((c) =>
-            moved.course === null || c === null || Math.abs(((moved.course - c + 540) % 360) - 180) >= 2
-              ? moved.course
-              : c,
-          );
-          setSpeedMps(moved.speed);
-          const next: Fix = { accuracy: p.coords.accuracy ?? null, timestamp: p.timestamp };
-
-          /*
-            THE GATE THAT WAS MISSING. Android's fused provider mixes sources: an 8-metre
-            satellite fix can be followed a second later by a 200-metre WiFi fix, simply
-            because that is what arrived next. Taking every update meant the newest always
-            won, so a good fix was thrown away for a bad one and the dot moved to the next
-            street. Refusing a much worse reading is the whole fix.
-          */
-          if (!isBetterFix(next, held.current, Date.now())) {
-            counts.current.rejected += 1;
-            setDebug((d) => ({ ...d, rejected: counts.current.rejected }));
-            return;
-          }
-
-          held.current = next;
-          counts.current.accepted += 1;
-
-          /*
-            SMOOTHED, NOT RAW. In dense streets every fix carries 60-90 m of uncertainty,
-            and two readings 40 m apart are not evidence the rider moved — they are the
-            same reading with different noise. Drawing whichever arrived last is what
-            makes the dot wander across the block while someone stands still.
-          */
-          const fixed = posFilter.current.push({
-            lng: p.coords.longitude,
-            lat: p.coords.latitude,
-            accuracy: p.coords.accuracy ?? null,
-            timestamp: p.timestamp,
-            /* Measured when the phone reports none (or a constant 0): see motion.ts. */
-            speed: moved.speed,
-            course: moved.course,
-          });
-          if (fixed) {
-            setPosition([fixed.lng, fixed.lat]);
-            setFixAt(p.timestamp);
-            rememberPosition(lastSaved, fixed.lng, fixed.lat, p.timestamp, p.coords.accuracy ?? null, !!p.mocked);
-          }
-          /*
-            The PHONE's figure, not the filter's. Averaging makes the filter's own number
-            look far better than the readings deserve when the error is the slow, shared
-            kind indoors, and then the "rough fix" warning never appeared.
-          */
-          setAccuracyM(p.coords.accuracy ?? null);
-          setStale(false);
-          if (isGoodFix(p.coords.accuracy)) setSettled(true);
-          setDebug((d) => ({
-            ...d,
-            /* The raw figure, so the readout still reports what the OS actually said. */
-            accuracyM: p.coords.accuracy ?? null,
-            smoothedM: fixed ? Math.round(fixed.accuracy) : null,
-            ageS: Math.round((Date.now() - p.timestamp) / 1000),
-            mocked: p.mocked ?? null,
-            accepted: counts.current.accepted,
-          }));
-        },
+        (p) => onReading(p, 'google'),
         /* Errors after the watch started (the provider going unavailable) are recorded too. */
         (reason) => {
           if (mounted.current) setDebug((d) => ({ ...d, watchError: String(reason) }));
@@ -460,6 +488,22 @@ function useLocationGateState(): LocationGate {
       }
     };
     await attempt(0);
+
+    /*
+      NO READING FROM GOOGLE, ANDROID'S OWN THEN. On a phone without Google's services (Huawei)
+      the watch above reports itself started and then never sends anything. If nothing has come
+      by now, Android's own location system is started beside it; whichever path reads first
+      wins through the same gate, and a newer search (`generation`) cancels this.
+    */
+    fallbackTimer.current = setTimeout(() => {
+      fallbackTimer.current = null;
+      if (!mounted.current || generation !== watchGeneration.current) return;
+      if (googleReadings.current > 0 || fallbackStop.current) return;
+      fallbackStop.current = startAndroidLocation(
+        (r) => onReading(r, 'android'),
+        (message) => mounted.current && setDebug((d) => ({ ...d, watchError: `Android: ${message}` })),
+      );
+    }, FALLBACK_AFTER_MS);
 
     /*
       The compass, separately from position.

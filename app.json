@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ayoos",
     "slug": "ayos",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ayos",
@@ -18,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "allowBackup": false
     },
     "web": {
       "output": "static",
@@ -38,12 +39,13 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Ayoos uses your location to show which repair shops are nearest to you. It is never shared and never leaves your phone.",
+          "locationAlwaysAndWhenInUsePermission": "Ayoos uses your location to show which repair shops are nearest to you and to draw the road to a shop you open.",
           "isAndroidBackgroundLocationEnabled": false,
-          "isAndroidForegroundServiceEnabled": false
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -57,7 +59,7 @@
     },
     "owner": "blundered-project",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/3db7a5da-428c-468e-af5e-8784339d17d2"

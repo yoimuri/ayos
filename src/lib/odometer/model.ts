@@ -6,9 +6,9 @@
  * ONLY NUMBERS ARE EVER KEPT: kilometres and times, on this phone. Never a position and never a
  * route. The last point exists only in memory, while a ride is running.
  *
- * COUNTS WHILE THE APP IS OPEN WITH THE SCREEN ON. Counting with the phone locked needs native
- * code (Clint, 5 Nov: test this first). A gap where nothing was read counts as a straight line
- * if the speed is believable, so it comes out low rather than high.
+ * COUNTS WHILE A RIDE RUNS, the screen on or the phone locked (lockedRide.ts, 1.4.0 build); on
+ * phones without Google only with the screen on. A gap where nothing was read counts as a straight
+ * line if the speed is believable, so it comes out low rather than high.
  */
 
 export type OdometerData = {
