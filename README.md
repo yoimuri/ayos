@@ -372,7 +372,7 @@ Published over the air to 1.4.0 on 23 Nov 2026 (update 01a2076e), not yet checke
   and the selected shop's pin shrink as the map zooms out
 - The 2D/3D button is on the bottom left, away from the recentre button
 
-Version 1.4.1, new APK, not built yet:
+Version 1.4.1, new APK (23 Nov 2026, build 37ed6c6c), not yet checked on a phone:
 
 - Fixes the Start ride crash: the app now declares the permission Android needs before it
   passes locked-screen readings to the app (RECEIVE_BOOT_COMPLETED)
