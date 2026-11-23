@@ -1577,10 +1577,11 @@ export function RealMap({
           disabled={zoomedOut}
           /*
             LEFT SIDE (Clint, 23 Nov): right above recentre it took taps meant for recentre while
-            riding. Above the credit button, the road-line note and the new-version chip (which
-            reaches 78 px), so it never covers them.
+            riding. Level with the map-only button on the right (Clint, 23 Nov), and above the
+            credit button and the road-line note (which reaches 66 px), so it never covers them.
+            The new-version chip sits above it (index.tsx).
           */
-          style={({ pressed }) => [s.leftBtn, { bottom: obscuredBottom + 86 }, pressed && s.pressed, zoomedOut && s.resting]}
+          style={({ pressed }) => [s.leftBtn, { bottom: obscuredBottom + 68 }, pressed && s.pressed, zoomedOut && s.resting]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityState={{ disabled: zoomedOut }}

@@ -9,6 +9,7 @@ import {
   parseOdometer,
   parseReading,
   reading,
+  resetOdometer,
   setReading,
   startRide,
   type Fix,
@@ -75,6 +76,11 @@ test('Start and End move a ride into the total; typing a reading restarts the co
   assert.equal(reading(d), 15000);
   d = { ...startRide(d, 2000), ride: { startedAt: 2000, km: 3 } };
   assert.equal(reading(d), 15003);
+});
+
+test('Reset clears the reading, the counted km, the last ride and a running ride', () => {
+  assert.deepEqual(resetOdometer(), EMPTY_ODOMETER);
+  assert.equal(reading(resetOdometer()), null);
 });
 
 test('pressing Start twice does not lose a ride', () => {

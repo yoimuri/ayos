@@ -105,6 +105,8 @@ export default function SettingsScreen() {
           {/*
             For older and cheaper phones (store.tsx, `graphics`). Light also lays a 3D map
             flat, since 3D does not exist there. Either change asks to restart (switchGraphics).
+            Shown as High and Low (Clint, 23 Nov); the saved keys stay `standard` and `light`, so
+            every phone keeps the choice it already made.
           */}
           <Choice
             label={t.graphics}

@@ -252,6 +252,9 @@ export type Strings = {
   thisRide: string;
   lastRide: string;
   countsWhileOpen: string;
+  odometerReset: string;
+  odometerResetTitle: string;
+  odometerResetBody: string;
   /** The notification while a ride counts with the phone locked (lockedRide.ts). */
   rideCounterTitle: string;
   rideCounterBody: string;
@@ -464,8 +467,8 @@ const en: Strings = {
 
   shopAlerts: 'Shop ahead alerts',
   graphics: 'Graphics',
-  graphicsStandard: 'Standard',
-  graphicsLight: 'Light, for older phones',
+  graphicsStandard: 'High',
+  graphicsLight: 'Low',
   graphicsRestartTitle: 'Restart Ayoos?',
   graphicsRestartBody: 'The new graphics setting loads fully on a fresh start. It takes about a second, and nothing you saved is lost.',
   reopenTitle: 'Close and reopen Ayoos',
@@ -533,6 +536,9 @@ const en: Strings = {
   thisRide: 'This ride',
   lastRide: 'Last ride',
   countsWhileOpen: 'Counts while Ayoos is open',
+  odometerReset: 'Reset odometer',
+  odometerResetTitle: 'Reset the odometer?',
+  odometerResetBody: 'This clears the reading, the counted kilometres and the last ride.',
   rideCounterTitle: 'Ayoos ride counter',
   rideCounterBody: 'Counting this ride',
   yourRide: 'Your ride',
@@ -742,8 +748,8 @@ const tl: Strings = {
 
   shopAlerts: 'Alerto sa shop sa unahan',
   graphics: 'Graphics',
-  graphicsStandard: 'Standard',
-  graphicsLight: 'Magaan, para sa lumang phone',
+  graphicsStandard: 'High',
+  graphicsLight: 'Low',
   graphicsRestartTitle: 'I-restart ang Ayoos?',
   graphicsRestartBody: 'Buong magagamit ang bagong graphics setting pagkabukas ulit. Mga isang segundo lang, at walang mawawala sa mga na-save mo.',
   reopenTitle: 'Isara at buksan ulit ang Ayoos',
@@ -812,6 +818,9 @@ const tl: Strings = {
   thisRide: 'Biyaheng ito',
   lastRide: 'Huling biyahe',
   countsWhileOpen: 'Bumibilang habang bukas ang Ayoos',
+  odometerReset: 'I-reset ang odometer',
+  odometerResetTitle: 'I-reset ang odometer?',
+  odometerResetBody: 'Mabubura ang reading, ang nabilang na kilometro, at ang huling biyahe.',
   rideCounterTitle: 'Ayoos ride counter',
   rideCounterBody: 'Binibilang ang biyaheng ito',
   yourRide: 'Ang motor mo',

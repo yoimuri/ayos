@@ -68,6 +68,11 @@ export function endRide(d: OdometerData): OdometerData {
   return { ...d, ride: null, countedKm: d.countedKm + d.ride.km, lastRideKm: d.ride.km };
 }
 
+/** Reset (Clint, 23 Nov): everything back to empty, a running ride included. */
+export function resetOdometer(): OdometerData {
+  return EMPTY_ODOMETER;
+}
+
 /** Typing a reading starts the count again from it. A ride running now carries on on top. */
 export function setReading(d: OdometerData, km: number): OdometerData {
   return { ...d, typedKm: km, countedKm: 0 };

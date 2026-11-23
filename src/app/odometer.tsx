@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandBar } from '@/components/BrandBar';
@@ -15,7 +15,7 @@ import type { Theme } from '@/lib/theme/tokens';
  */
 export default function OdometerScreen() {
   const { theme, t } = useSettings();
-  const { data, start, end, type } = useOdometer();
+  const { data, start, end, type, reset } = useOdometer();
   const [text, setText] = useState('');
   const s = styles(theme);
   const now = reading(data);
@@ -76,6 +76,20 @@ export default function OdometerScreen() {
             <Text style={s.saveText}>{t.rideSave}</Text>
           </Pressable>
         </View>
+
+        {/* Reset (Clint, 23 Nov). Asks first: it cannot be undone. */}
+        <Pressable
+          onPress={() =>
+            Alert.alert(t.odometerResetTitle, t.odometerResetBody, [
+              { text: t.cancel, style: 'cancel' },
+              { text: t.odometerReset, style: 'destructive', onPress: reset },
+            ])
+          }
+          style={({ pressed }) => [s.reset, pressed && s.pressed]}
+          accessibilityRole="button"
+        >
+          <Text style={s.resetText}>{t.odometerReset}</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -109,5 +123,7 @@ const styles = (theme: Theme) =>
     save: { height: 50, paddingHorizontal: 22, borderRadius: 12, backgroundColor: theme.ink, alignItems: 'center', justifyContent: 'center' },
     saveOff: { opacity: 0.4 },
     saveText: { color: theme.bg, fontSize: 15, fontWeight: '700' },
+    reset: { alignSelf: 'flex-start', paddingVertical: 10, marginTop: 12 },
+    resetText: { color: theme.accent, fontSize: 15, fontWeight: '700' },
     pressed: { opacity: 0.8 },
   });

@@ -11,6 +11,7 @@ import {
   EMPTY_ODOMETER,
   endRide,
   parseOdometer,
+  resetOdometer,
   setReading,
   startRide,
   type Fix,
@@ -40,6 +41,7 @@ type OdometerApi = {
   start: () => void;
   end: () => void;
   type: (km: number) => void;
+  reset: () => void;
 };
 
 const OdometerContext = createContext<OdometerApi | null>(null);
@@ -132,6 +134,11 @@ export function OdometerProvider({ children }: { children: ReactNode }) {
         change(endRide);
       },
       type: (km) => change((d) => setReading(d, km)),
+      /* Ending the ride here also stops the locked-screen counter (the riding effect). */
+      reset: () => {
+        lastPoint.current = null;
+        change(resetOdometer);
+      },
     }),
     [data, change],
   );

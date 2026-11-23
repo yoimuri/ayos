@@ -874,7 +874,8 @@ export default function HomeScreen() {
         */}
         {updateReady && !updateLater && !bare && stageH > 0 && sheetAt !== 'list' && (
           <UpdateChip
-            bottom={stageH - sheetTop(sheetAt, stageH, headerH) + 44}
+            /* Above the 2D/3D button (68 to 114 px) where that button shows; Light has none. */
+            bottom={stageH - sheetTop(sheetAt, stageH, headerH) + (light ? 44 : 122)}
             onUpdate={() => void restartIntoUpdate()}
             onClose={() => setUpdateLater(true)}
           />

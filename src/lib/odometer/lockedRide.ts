@@ -13,6 +13,10 @@ import type { Fix } from './model';
  * time" (LocationModule.kt, startLocationUpdatesAsync: a user-started foreground service does not
  * need background location), and the service ends with the ride.
  *
+ * NEEDS RECEIVE_BOOT_COMPLETED (app.json, 1.4.1). Each reading reaches the app as a saved Android
+ * job, and Android refuses a saved job without that permission. In 1.4.0 it was missing and the
+ * refusal crashed the app on every reading, so Start ride crashed (Clint's log, 23 Nov).
+ *
  * STILL ONLY NUMBERS. Each reading goes straight to the counter (model.ts) and is dropped; no
  * position or route is kept.
  *

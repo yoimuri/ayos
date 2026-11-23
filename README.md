@@ -360,7 +360,8 @@ Version 1.4.0, new APK (23 Nov 2026, build c70b9efc), not yet checked on a phone
   nothing for 8 seconds, Android's own location system takes over. Build info shows which one
   is in use
 - The ride counter keeps counting with the phone locked, with an "Ayoos ride counter"
-  notification while the ride runs (not on phones without Google, where the screen stays on)
+  notification while the ride runs (not on phones without Google, where the screen stays on).
+  **Broken in 1.4.0:** Start ride crashes the app (a missing Android permission); fixed in 1.4.1
 - Android backup is off, so app data no longer copies to the rider's Google account
 - Expo patch updates, updates now matched to the app by its native code (fingerprint), four
   unused native packages removed, and the 3D library compiled in for live 3D in Your ride later
@@ -370,6 +371,14 @@ Published over the air to 1.4.0 on 23 Nov 2026 (update 01a2076e), not yet checke
 - The road line's arrows are small white chevrons inside the line, and the line, the chevrons
   and the selected shop's pin shrink as the map zooms out
 - The 2D/3D button is on the bottom left, away from the recentre button
+
+Version 1.4.1, new APK, not built yet:
+
+- Fixes the Start ride crash: the app now declares the permission Android needs before it
+  passes locked-screen readings to the app (RECEIVE_BOOT_COMPLETED)
+- The 2D/3D button sits level with the map-only button; the new-version chip moves above it
+- Graphics options are named High and Low
+- The odometer has a Reset, which asks first
 
 Not built yet:
 
